@@ -2,6 +2,7 @@ import { CalendarClock, FilePenLine, Files, FolderTree, Image, LayoutDashboard, 
 import type { ReactNode } from "react";
 
 import { DashboardShell, type DashboardNavItem } from "@/components/layout/dashboard-shell";
+import { requireApplicationAccess } from "@/features/auth/services/authorization";
 
 const navigation: readonly DashboardNavItem[] = [
   { href: "/publisher", icon: LayoutDashboard, label: "Overview" },
@@ -14,6 +15,7 @@ const navigation: readonly DashboardNavItem[] = [
 ] as const;
 
 /** Independent editorial publishing layout. Authorization is added in Phase 2. */
-export default function PublisherLayout({ children }: Readonly<{ children: ReactNode }>) {
-  return <DashboardShell appName="Publishing Studio" navigation={navigation}>{children}</DashboardShell>;
+export default async function PublisherLayout({ children }: Readonly<{ children: ReactNode }>) {
+  const access = await requireApplicationAccess("publisher");
+  return <DashboardShell appName="Publishing Studio" navigation={navigation} userEmail={access.email}>{children}</DashboardShell>;
 }

@@ -1,0 +1,2 @@
+-- Intentionally empty. Roles and permissions are required configuration and are
+-- inserted by the migration. Development users should be created through Auth.

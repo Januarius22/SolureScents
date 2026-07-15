@@ -3,8 +3,9 @@
 import { createBrowserClient } from "@supabase/ssr";
 
 import { getPublicEnvironment } from "@/validation/env";
+import type { Database } from "@/types/database";
 
-type BrowserSupabaseClient = ReturnType<typeof createBrowserClient>;
+type BrowserSupabaseClient = ReturnType<typeof createBrowserClient<Database>>;
 
 let browserClient: BrowserSupabaseClient | undefined;
 
@@ -15,7 +16,7 @@ export function getBrowserSupabaseClient(): BrowserSupabaseClient {
   }
 
   const environment = getPublicEnvironment();
-  browserClient = createBrowserClient(
+  browserClient = createBrowserClient<Database>(
     environment.NEXT_PUBLIC_SUPABASE_URL,
     environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );

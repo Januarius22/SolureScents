@@ -2,6 +2,7 @@ import { Bell, Gift, Heart, House, MapPin, Package, Settings, Star, UserRound } 
 import type { ReactNode } from "react";
 
 import { DashboardShell, type DashboardNavItem } from "@/components/layout/dashboard-shell";
+import { requireApplicationAccess } from "@/features/auth/services/authorization";
 
 const navigation: readonly DashboardNavItem[] = [
   { href: "/account", icon: House, label: "Overview" },
@@ -16,6 +17,7 @@ const navigation: readonly DashboardNavItem[] = [
 ] as const;
 
 /** Independent customer application layout. Authorization is added in Phase 2. */
-export default function AccountLayout({ children }: Readonly<{ children: ReactNode }>) {
-  return <DashboardShell appName="My Account" navigation={navigation}>{children}</DashboardShell>;
+export default async function AccountLayout({ children }: Readonly<{ children: ReactNode }>) {
+  const access = await requireApplicationAccess("account");
+  return <DashboardShell appName="My Account" navigation={navigation} userEmail={access.email}>{children}</DashboardShell>;
 }
