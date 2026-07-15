@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Wordmark } from "@/components/brand/wordmark";
 
 const navigation = [
+  { href: "/discovery", label: "Scent Finder" },
   { href: "/shop", label: "Shop" },
   { href: "/collections", label: "Collections" },
   { href: "/brands", label: "Brands" },

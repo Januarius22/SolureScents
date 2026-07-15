@@ -60,6 +60,22 @@ body {
   outline-offset: 3px;
 }
 
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  background: var(--charcoal);
+  color: white;
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.skip-link:focus { transform: translateY(0); }
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

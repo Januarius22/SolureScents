@@ -1,0 +1,15 @@
+import type { Metadata } from "next";
+import { ProductCard } from "@/components/store/product-card";
+import { recommendFragrances } from "@/features/recommendations/services/recommendation-engine";
+import { fragrancePreferencesSchema } from "@/features/recommendations/validation/preferences";
+
+export const metadata:Metadata={title:"Scent Finder",description:"Discover fragrances matched to your character, occasion, and desired presence."};
+type DiscoveryProps={searchParams:Promise<Record<string,string|string[]|undefined>>};
+
+export default async function Page({searchParams}:DiscoveryProps){
+  const q=await searchParams;const submitted=q.match==="true";
+  const prefs=fragrancePreferencesSchema.parse({mood:q.mood,occasion:q.occasion,character:q.character});
+  const matches=submitted?await recommendFragrances(prefs):[];
+  return <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8"><header className="max-w-3xl"><p className="text-xs tracking-[.2em] text-gold uppercase">Intelligent discovery</p><h1 className="mt-3 font-display text-6xl">Find your signature.</h1><p className="mt-5 text-base leading-7 text-muted">Three considered questions create an explainable match from the Solure collection. Your answers stay in this request and are not used to profile you.</p></header><form className="mt-12 grid gap-6 border bg-white p-6 sm:grid-cols-3 sm:p-8" method="get"><input name="match" type="hidden" value="true"/><Question label="Desired presence" name="mood" options={["quiet","balanced","bold"]} value={prefs.mood}/><Question label="Where will you wear it?" name="occasion" options={["everyday","evening","occasion"]} value={prefs.occasion}/><Question label="Scent character" name="character" options={["fresh","floral","woody","amber"]} value={prefs.character}/><button className="min-h-12 bg-charcoal px-6 text-xs font-semibold tracking-wider text-white uppercase sm:col-span-3 hover:bg-gold" type="submit">Reveal my matches</button></form>{submitted&&<section className="mt-16" aria-live="polite"><h2 className="font-display text-4xl">Your closest matches</h2>{matches.length?<div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">{matches.map(m=><div key={m.product.id}><ProductCard product={m.product}/><div className="mt-4 border-l-2 border-gold pl-3"><p className="text-xs font-semibold">{m.score}% match</p><p className="mt-1 text-xs leading-5 text-muted">{m.reasons.join(". ")}.</p></div></div>)}</div>:<p className="mt-6 text-muted">The collection is being prepared. Please return soon.</p>}</section>}</div>;
+}
+function Question({label,name,options,value}:{label:string;name:string;options:readonly string[];value:string}){return <fieldset><legend className="mb-3 text-sm font-semibold">{label}</legend><div className="space-y-2">{options.map(o=><label className="flex min-h-11 cursor-pointer items-center gap-3 border px-3 text-sm capitalize has-checked:border-gold has-checked:bg-amber-50" key={o}><input defaultChecked={o===value} name={name} type="radio" value={o}/>{o}</label>)}</div></fieldset>}
