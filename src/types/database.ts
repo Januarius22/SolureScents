@@ -7,11 +7,11 @@ type TableDefinition<Row, Insert = Partial<Row>, Update = Partial<Insert>> = {
   Relationships: [];
 };
 
-interface AuditColumns {
+type AuditColumns = {
   created_at: string;
   id: string;
   updated_at: string;
-}
+};
 
 export interface Database {
   public: {
@@ -67,16 +67,83 @@ export interface Database {
         name: string;
         slug: string;
       }>;
+      products: TableDefinition<AuditColumns & {
+        brand_id: string;
+        concentration: Database["public"]["Enums"]["fragrance_concentration"];
+        description: string;
+        family_id: string | null;
+        is_featured: boolean;
+        launch_year: number | null;
+        longevity_hours_max: number | null;
+        longevity_hours_min: number | null;
+        name: string;
+        perfumer: string | null;
+        published_at: string | null;
+        seo_description: string | null;
+        seo_title: string | null;
+        sillage: Database["public"]["Enums"]["sillage_level"] | null;
+        slug: string;
+        status: Database["public"]["Enums"]["product_status"];
+        story: string | null;
+        subtitle: string | null;
+      }>;
+      product_variants: TableDefinition<AuditColumns & {
+        barcode: string | null;
+        compare_at_price_minor: number | null;
+        cost_minor: number | null;
+        currency: string;
+        is_available: boolean;
+        label: string;
+        low_stock_limit: number;
+        price_minor: number;
+        product_id: string;
+        size_ml: number;
+        sku: string;
+        status: Database["public"]["Enums"]["variant_status"];
+        weight_grams: number;
+      }>;
+      collection_products: TableDefinition<AuditColumns & {
+        collection_id: string;
+        product_id: string;
+        sort_order: number;
+      }>;
+      carts: TableDefinition<AuditColumns & {
+        currency: string;
+        expires_at: string;
+        profile_id: string;
+        status: Database["public"]["Enums"]["cart_status"];
+      }>;
+      cart_items: TableDefinition<AuditColumns & {
+        cart_id: string;
+        currency: string;
+        quantity: number;
+        unit_price_minor: number;
+        variant_id: string;
+      }>;
     };
     Views: Record<never, never>;
     Functions: {
       current_user_roles: { Args: Record<never, never>; Returns: string[] };
+      add_cart_item: {
+        Args: { add_quantity: number; target_variant_id: string };
+        Returns: Database["public"]["Tables"]["cart_items"]["Row"];
+      };
+      create_checkout_session: { Args: { target_cart_id: string }; Returns: string };
+      get_variant_availability: {
+        Args: { target_variant_ids: string[] };
+        Returns: { available_quantity: number; variant_id: string }[];
+      };
       has_permission: { Args: { requested_permission: string }; Returns: boolean };
       has_role: { Args: { requested_role: string }; Returns: boolean };
     };
     Enums: {
       notification_kind: "system" | "order" | "account" | "reward" | "editorial";
       profile_status: "active" | "suspended" | "deactivated";
+      cart_status: "active" | "converted" | "abandoned" | "expired";
+      fragrance_concentration: "edc" | "edt" | "edp" | "parfum" | "extrait" | "oil";
+      product_status: "draft" | "active" | "archived";
+      sillage_level: "intimate" | "moderate" | "strong" | "enormous";
+      variant_status: "draft" | "active" | "discontinued";
     };
     CompositeTypes: Record<never, never>;
   };
