@@ -58,3 +58,9 @@ npm run db:push
 ```
 
 See `docs/security-and-access.md` before creating the first administrator or changing role grants.
+
+## Commerce foundation
+
+Phase 3 adds the normalized fragrance catalogue, variants, inventory, customer addresses, shipping rules, carts, discounts, checkout sessions, orders, and provider-neutral payment records. Database operations that affect price or stock use trusted PostgreSQL functions rather than client-calculated values.
+
+See `docs/commerce-domain.md` for domain invariants and the boundary between Phase 3 foundations and later storefront/payment workflows.
