@@ -120,6 +120,26 @@ export interface Database {
         unit_price_minor: number;
         variant_id: string;
       }>;
+      brands: TableDefinition<AuditColumns & {
+        country_code: string | null;
+        description: string | null;
+        founded_year: number | null;
+        is_active: boolean;
+        logo_path: string | null;
+        name: string;
+        slug: string;
+        sort_order: number;
+        website_url: string | null;
+      }>;
+      collections: TableDefinition<AuditColumns & {
+        description: string | null;
+        hero_image_path: string | null;
+        is_active: boolean;
+        is_featured: boolean;
+        name: string;
+        slug: string;
+        sort_order: number;
+      }>;
     };
     Views: Record<never, never>;
     Functions: {

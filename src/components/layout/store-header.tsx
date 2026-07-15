@@ -13,11 +13,10 @@ const navigation = [
 /** Public-store navigation, intentionally isolated from all authenticated apps. */
 export function StoreHeader() {
   return (
-    <header className="border-b bg-pearl/95">
+    <header className="sticky top-0 z-40 border-b bg-pearl/95 backdrop-blur-xl">
+      <div className="bg-charcoal px-4 py-2 text-center text-[0.62rem] tracking-[0.16em] text-pearl uppercase">Complimentary consultation with every order</div>
       <div className="mx-auto flex h-20 max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-12">
-        <button className="inline-flex size-11 items-center justify-center lg:hidden" aria-label="Open menu" type="button">
-          <Menu aria-hidden="true" size={20} strokeWidth={1.5} />
-        </button>
+        <details className="relative lg:hidden"><summary className="flex size-11 cursor-pointer list-none items-center justify-center" aria-label="Open menu"><Menu aria-hidden="true" size={20} strokeWidth={1.5} /></summary><nav className="absolute -left-5 top-14 w-screen border-b bg-pearl p-6 shadow-soft" aria-label="Mobile store navigation">{navigation.map((item)=><Link key={item.href} className="block border-b py-4 text-sm tracking-[0.12em] uppercase" href={item.href}>{item.label}</Link>)}</nav></details>
         <Wordmark />
         <nav aria-label="Store navigation" className="hidden items-center gap-9 lg:flex">
           {navigation.map((item) => (

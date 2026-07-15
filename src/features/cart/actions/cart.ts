@@ -23,3 +23,8 @@ export async function addCartItemAction(formData: FormData): Promise<ServiceResu
     return { ok: false, code: "CART_ERROR", message: "This fragrance could not be added to your cart." };
   }
 }
+
+/** Progressive-enhancement adapter for plain server-rendered product forms. */
+export async function addCartItemFormAction(formData: FormData): Promise<void> {
+  await addCartItemAction(formData);
+}

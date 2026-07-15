@@ -2,11 +2,13 @@ import Link from "next/link";
 
 import { buttonStyles } from "@/components/ui/button";
 import { siteConfig } from "@/config/site";
+import { SectionHeading } from "@/components/ui/section-heading";
 
 /** Phase-one brand canvas for the future storefront. */
 export default function HomePage() {
   return (
-    <section className="relative isolate flex min-h-[calc(100svh-5rem)] items-center overflow-hidden px-5 py-24 sm:px-8 lg:px-12">
+    <>
+    <section className="relative isolate flex min-h-[calc(100svh-7rem)] items-center overflow-hidden px-5 py-24 sm:px-8 lg:px-12">
       <div aria-hidden="true" className="absolute inset-y-0 right-0 -z-10 w-1/2 bg-ivory/70" />
       <div className="mx-auto w-full max-w-[90rem]">
         <div className="max-w-4xl">
@@ -23,5 +25,8 @@ export default function HomePage() {
         </div>
       </div>
     </section>
+    <section className="border-y bg-surface px-5 py-24 sm:px-8 lg:px-12"><div className="mx-auto grid max-w-[90rem] gap-14 lg:grid-cols-[0.8fr_1.2fr]"><SectionHeading eyebrow="The Solure standard" title="Chosen slowly. Remembered instantly."/><div className="grid gap-8 sm:grid-cols-3">{[{n:"01",t:"Authentic",d:"Every bottle is sourced through trusted channels."},{n:"02",t:"Considered",d:"An edited collection, never an endless catalogue."},{n:"03",t:"Personal",d:"Guidance shaped around how you want to feel."}].map(x=><div key={x.n} className="border-t border-champagne pt-5"><span className="text-xs text-gold">{x.n}</span><h2 className="mt-5 font-display text-2xl">{x.t}</h2><p className="mt-3 text-sm leading-6 text-muted">{x.d}</p></div>)}</div></div></section>
+    <section className="px-5 py-28 text-center sm:px-8"><p className="text-xs tracking-[0.2em] text-gold uppercase">Private consultation</p><h2 className="mx-auto mt-5 max-w-3xl font-display text-5xl sm:text-7xl">Find the fragrance that already feels like a memory.</h2><Link href="/contact" className={buttonStyles("primary", "mt-10")}>Speak with Solure</Link></section>
+    </>
   );
 }
