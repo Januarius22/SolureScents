@@ -140,6 +140,35 @@ export interface Database {
         slug: string;
         sort_order: number;
       }>;
+      addresses: TableDefinition<AuditColumns & {
+        city: string; country_code: string; is_default_billing: boolean; is_default_shipping: boolean;
+        label: string; line_1: string; line_2: string | null; phone: string; postal_code: string | null;
+        profile_id: string; recipient_name: string; state_region: string;
+      }>;
+      orders: TableDefinition<AuditColumns & {
+        billing_address: Json; cancelled_at: string | null; carrier: string | null; checkout_session_id: string | null;
+        currency: string; customer_email: string; customer_note: string | null; delivered_at: string | null;
+        discount_minor: number; fulfillment_status: Database["public"]["Enums"]["fulfillment_status"];
+        order_number: string; placed_at: string | null; profile_id: string; shipped_at: string | null;
+        shipping_address: Json; shipping_minor: number; status: Database["public"]["Enums"]["order_status"];
+        subtotal_minor: number; tax_minor: number; total_minor: number; tracking_number: string | null; tracking_url: string | null;
+      }>;
+      wishlist_items: TableDefinition<AuditColumns & { profile_id: string; product_id: string }>;
+      reviews: TableDefinition<AuditColumns & {
+        body: string; is_verified_purchase: boolean; order_item_id: string | null; profile_id: string;
+        product_id: string; published_at: string | null; rating: number;
+        status: Database["public"]["Enums"]["review_status"]; title: string | null;
+      }>;
+      reward_accounts: TableDefinition<AuditColumns & {
+        lifetime_points: number; points_balance: number; profile_id: string; tier: string;
+      }>;
+      reward_transactions: TableDefinition<AuditColumns & {
+        description: string; expires_at: string | null; kind: Database["public"]["Enums"]["reward_transaction_kind"];
+        order_id: string | null; points: number; reward_account_id: string;
+      }>;
+      notification_preferences: TableDefinition<AuditColumns & {
+        editorial: boolean; marketing_email: boolean; order_updates: boolean; profile_id: string; rewards: boolean;
+      }>;
     };
     Views: Record<never, never>;
     Functions: {
@@ -164,6 +193,10 @@ export interface Database {
       product_status: "draft" | "active" | "archived";
       sillage_level: "intimate" | "moderate" | "strong" | "enormous";
       variant_status: "draft" | "active" | "discontinued";
+      order_status: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
+      fulfillment_status: "unfulfilled" | "processing" | "partially_fulfilled" | "fulfilled" | "returned";
+      review_status: "pending" | "published" | "rejected";
+      reward_transaction_kind: "earned" | "redeemed" | "adjusted" | "expired";
     };
     CompositeTypes: Record<never, never>;
   };
