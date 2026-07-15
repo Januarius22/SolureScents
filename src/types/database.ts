@@ -169,6 +169,17 @@ export interface Database {
       notification_preferences: TableDefinition<AuditColumns & {
         editorial: boolean; marketing_email: boolean; order_updates: boolean; profile_id: string; rewards: boolean;
       }>;
+      inventory_locations: TableDefinition<AuditColumns & { address: Json; code: string; is_active: boolean; name: string }>;
+      inventory_levels: TableDefinition<AuditColumns & { location_id: string; on_hand: number; reserved: number; variant_id: string }>;
+      inventory_movements: TableDefinition<AuditColumns & {
+        actor_id: string | null; inventory_level_id: string; note: string | null; quantity_delta: number;
+        reason: Database["public"]["Enums"]["inventory_movement_reason"]; reference_id: string | null; reference_type: string | null;
+      }>;
+      payments: TableDefinition<AuditColumns & {
+        amount_minor: number; authorized_at: string | null; captured_at: string | null; currency: string; failed_at: string | null;
+        failure_code: string | null; failure_message: string | null; idempotency_key: string; metadata: Json; order_id: string;
+        provider: string; provider_reference: string | null; refunded_minor: number; status: Database["public"]["Enums"]["payment_status"];
+      }>;
     };
     Views: Record<never, never>;
     Functions: {
@@ -184,6 +195,15 @@ export interface Database {
       };
       has_permission: { Args: { requested_permission: string }; Returns: boolean };
       has_role: { Args: { requested_role: string }; Returns: boolean };
+      adjust_inventory: {
+        Args: { target_inventory_level_id: string; quantity_delta: number; movement_reason: Database["public"]["Enums"]["inventory_movement_reason"]; movement_note?: string | null; movement_reference_type?: string | null; movement_reference_id?: string | null };
+        Returns: Database["public"]["Tables"]["inventory_levels"]["Row"];
+      };
+      update_order_operations: {
+        Args: { target_order_id: string; next_status: Database["public"]["Enums"]["order_status"]; next_fulfillment_status: Database["public"]["Enums"]["fulfillment_status"]; tracking_carrier?: string | null; tracking_code?: string | null; tracking_link?: string | null; status_note?: string | null };
+        Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
+      prepare_offline_payment: { Args: { target_order_id: string; payment_provider: string; payment_reference?: string | null }; Returns: Database["public"]["Tables"]["payments"]["Row"] };
     };
     Enums: {
       notification_kind: "system" | "order" | "account" | "reward" | "editorial";
@@ -197,6 +217,8 @@ export interface Database {
       fulfillment_status: "unfulfilled" | "processing" | "partially_fulfilled" | "fulfilled" | "returned";
       review_status: "pending" | "published" | "rejected";
       reward_transaction_kind: "earned" | "redeemed" | "adjusted" | "expired";
+      inventory_movement_reason: "receipt" | "sale" | "return" | "damage" | "correction" | "transfer_in" | "transfer_out";
+      payment_status: "pending" | "requires_action" | "authorized" | "captured" | "partially_refunded" | "refunded" | "failed" | "cancelled";
     };
     CompositeTypes: Record<never, never>;
   };
