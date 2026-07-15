@@ -2,6 +2,7 @@ import { BadgePercent, BarChart3, Boxes, CreditCard, LayoutDashboard, Package, S
 import type { ReactNode } from "react";
 
 import { DashboardShell, type DashboardNavItem } from "@/components/layout/dashboard-shell";
+import { requireApplicationAccess } from "@/features/auth/services/authorization";
 
 const navigation: readonly DashboardNavItem[] = [
   { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
@@ -16,6 +17,7 @@ const navigation: readonly DashboardNavItem[] = [
 ] as const;
 
 /** Independent enterprise administration layout. Authorization is added in Phase 2. */
-export default function AdminLayout({ children }: Readonly<{ children: ReactNode }>) {
-  return <DashboardShell appName="Administration" navigation={navigation}>{children}</DashboardShell>;
+export default async function AdminLayout({ children }: Readonly<{ children: ReactNode }>) {
+  const access = await requireApplicationAccess("admin");
+  return <DashboardShell appName="Administration" navigation={navigation} userEmail={access.email}>{children}</DashboardShell>;
 }

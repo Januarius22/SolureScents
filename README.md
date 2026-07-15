@@ -39,4 +39,22 @@ Feature folders containing their own `actions`, `components`, `hooks`, `services
 - `npm run check`
 - `npm run build`
 
-Authentication, authorization, middleware/proxy enforcement, database migrations, RLS policies, and storage rules belong to Phase 2 and must be implemented together so no route is protected only in the browser.
+## Authentication and database
+
+Phase 2 adds one shared authentication entrance with database-backed role routing:
+
+- customers → `/account`
+- publishers → `/publisher`
+- operational staff, administrators, and super administrators → `/admin`
+
+Protected routes are checked at the request boundary in `src/proxy.ts` and authorized again inside each server-rendered application layout. PostgreSQL RLS remains the final authorization boundary for data.
+
+Database changes live in `supabase/migrations`. After authenticating the CLI, link the project and deploy pending migrations:
+
+```bash
+npx supabase login
+npm run db:link -- --project-ref YOUR_PROJECT_REF
+npm run db:push
+```
+
+See `docs/security-and-access.md` before creating the first administrator or changing role grants.
