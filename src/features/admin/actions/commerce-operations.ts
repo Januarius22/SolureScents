@@ -1,0 +1,14 @@
+"use server";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { requireApplicationAccess } from "@/features/auth/services/authorization";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+const orderStatus=z.enum(["pending","confirmed","processing","shipped","delivered","cancelled","refunded"]);
+const fulfillmentStatus=z.enum(["unfulfilled","processing","partially_fulfilled","fulfilled","returned"]);
+const movementReason=z.enum(["receipt","sale","return","damage","correction","transfer_in","transfer_out"]);
+async function adminDb(){await requireApplicationAccess("admin");return createServerSupabaseClient()}
+
+export async function adjustInventory(formData:FormData){const v=z.object({id:z.string().uuid(),quantity:z.coerce.number().int().refine(n=>n!==0),reason:movementReason,note:z.string().trim().max(500)}).parse({id:formData.get("id"),quantity:formData.get("quantity"),reason:formData.get("reason"),note:formData.get("note")});const db=await adminDb();const {error}=await db.rpc("adjust_inventory",{target_inventory_level_id:v.id,quantity_delta:v.quantity,movement_reason:v.reason,movement_note:v.note||null});if(error)throw new Error("Inventory adjustment failed.",{cause:error});revalidatePath("/admin/inventory");revalidatePath("/admin")}
+export async function updateOrder(formData:FormData){const v=z.object({id:z.string().uuid(),status:orderStatus,fulfillment:fulfillmentStatus,carrier:z.string().trim().max(80),tracking:z.string().trim().max(120),url:z.union([z.literal(""),z.string().url()]),note:z.string().trim().max(500)}).parse({id:formData.get("id"),status:formData.get("status"),fulfillment:formData.get("fulfillment"),carrier:formData.get("carrier"),tracking:formData.get("tracking"),url:formData.get("url"),note:formData.get("note")});const db=await adminDb();const {error}=await db.rpc("update_order_operations",{target_order_id:v.id,next_status:v.status,next_fulfillment_status:v.fulfillment,tracking_carrier:v.carrier||null,tracking_code:v.tracking||null,tracking_link:v.url||null,status_note:v.note||null});if(error)throw new Error("Order update failed.",{cause:error});revalidatePath("/admin/orders");revalidatePath("/account/orders");revalidatePath("/admin")}
+export async function preparePayment(formData:FormData){const v=z.object({order:z.string().uuid(),provider:z.string().regex(/^[a-z][a-z0-9_-]{1,39}$/),reference:z.string().trim().max(120)}).parse({order:formData.get("order"),provider:formData.get("provider"),reference:formData.get("reference")});const db=await adminDb();const {error}=await db.rpc("prepare_offline_payment",{target_order_id:v.order,payment_provider:v.provider,payment_reference:v.reference||null});if(error)throw new Error("Payment preparation failed.",{cause:error});revalidatePath("/admin/payments");revalidatePath("/admin")}
