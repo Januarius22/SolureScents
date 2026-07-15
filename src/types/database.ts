@@ -140,6 +140,7 @@ export interface Database {
         slug: string;
         sort_order: number;
       }>;
+      fragrance_families: TableDefinition<AuditColumns & { description: string | null; name: string; slug: string }>;
       addresses: TableDefinition<AuditColumns & {
         city: string; country_code: string; is_default_billing: boolean; is_default_shipping: boolean;
         label: string; line_1: string; line_2: string | null; phone: string; postal_code: string | null;

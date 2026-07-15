@@ -52,7 +52,8 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full">
-        <AppProviders>{children}</AppProviders>
+        <a className="skip-link" href="#main-content">Skip to main content</a>
+        <div id="main-content" tabIndex={-1}><AppProviders>{children}</AppProviders></div>
       </body>
     </html>
   );
