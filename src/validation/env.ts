@@ -10,18 +10,27 @@ export type PublicEnvironment = z.infer<typeof publicEnvironmentSchema>;
 
 let cachedEnvironment: PublicEnvironment | undefined;
 
+function readPublicEnvironment() {
+  return publicEnvironmentSchema.safeParse({
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  });
+}
+
+/** Allows infrastructure adapters to degrade safely when local setup is incomplete. */
+export function isPublicEnvironmentConfigured(): boolean {
+  return readPublicEnvironment().success;
+}
+
 /** Validates public configuration at the infrastructure boundary before use. */
 export function getPublicEnvironment(): PublicEnvironment {
   if (cachedEnvironment) {
     return cachedEnvironment;
   }
 
-  const result = publicEnvironmentSchema.safeParse({
-    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-  });
+  const result = readPublicEnvironment();
 
   if (!result.success) {
     const fields = result.error.issues

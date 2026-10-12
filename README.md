@@ -6,9 +6,12 @@ Enterprise luxury fragrance commerce built with Next.js, TypeScript, Tailwind CS
 
 1. Copy `.env.example` to `.env.local`.
 2. Add the Supabase project URL and publishable key.
-3. Run `npm run dev`.
+3. Install dependencies with `npm ci`.
+4. Run `npm run dev`.
 
-The landing page can build without Supabase credentials. Configuration is validated when a Supabase client is first requested, providing a clear failure at the infrastructure boundary.
+Linting and type generation can run without Supabase credentials. A production build requires the values from `.env.example` because authenticated routes and the dynamic sitemap initialize the Supabase client while Next.js collects route data.
+
+In development, public informational pages remain available before Supabase is configured. Catalogue, authentication, account, administration, and other database-backed features require real Supabase values; placeholder credentials do not provide a working backend.
 
 ## Application boundaries
 
