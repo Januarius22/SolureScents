@@ -1,4 +1,4 @@
-import { BadgePercent, BarChart3, Boxes, CreditCard, LayoutDashboard, Package, Settings, ShoppingCart, Users } from "lucide-react";
+import { BarChart3, Boxes, CreditCard, LayoutDashboard, Package, Settings, ShoppingCart, Users } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { DashboardShell, type DashboardNavItem } from "@/components/layout/dashboard-shell";
@@ -12,7 +12,6 @@ const navigation: readonly DashboardNavItem[] = [
   { href: "/admin/customers", icon: Users, label: "Customers" },
   { href: "/admin/payments", icon: CreditCard, label: "Payments" },
   { href: "/admin/analytics", icon: BarChart3, label: "Analytics" },
-  { href: "/admin/discounts", icon: BadgePercent, label: "Discounts" },
   { href: "/admin/settings", icon: Settings, label: "Settings" },
 ] as const;
 
