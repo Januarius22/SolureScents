@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { ProductSummary, ProductVariantSummary } from "@/features/catalog/types/catalog";
 import { productFiltersSchema, type ProductFilters } from "@/features/catalog/validation/catalog";
@@ -8,6 +10,36 @@ export interface PaginatedProducts {
   pageSize: number;
   total: number;
 }
+
+export interface CatalogFacetOption {
+  id: string;
+  name: string;
+}
+
+export interface CatalogFacets {
+  brands: CatalogFacetOption[];
+  collections: CatalogFacetOption[];
+  families: CatalogFacetOption[];
+}
+
+/** Supplies the public filter labels while keeping catalogue controls tied to live data. */
+export const getCatalogFacets = cache(async (): Promise<CatalogFacets> => {
+  const supabase = await createServerSupabaseClient();
+  const [brandsResult, collectionsResult, familiesResult] = await Promise.all([
+    supabase.from("brands").select("id, name").eq("is_active", true).order("sort_order").order("name"),
+    supabase.from("collections").select("id, name").eq("is_active", true).order("sort_order").order("name"),
+    supabase.from("fragrance_families").select("id, name").order("name"),
+  ]);
+
+  const error = brandsResult.error ?? collectionsResult.error ?? familiesResult.error;
+  if (error) throw new Error("Unable to load catalogue filters.", { cause: error });
+
+  return {
+    brands: brandsResult.data ?? [],
+    collections: collectionsResult.data ?? [],
+    families: familiesResult.data ?? [],
+  };
+});
 
 /** Reads the public catalogue through RLS-filtered product and variant queries. */
 export async function listPublishedProducts(input: ProductFilters): Promise<PaginatedProducts> {

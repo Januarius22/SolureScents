@@ -11,7 +11,7 @@ export const getBrands = cache(async () => {
 
 export const getCollections = cache(async () => {
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase.from("collections").select("id, name, slug, description, is_featured").eq("is_active", true).order("sort_order").order("name");
+  const { data, error } = await supabase.from("collections").select("id, name, slug, description, hero_image_path, is_featured").eq("is_active", true).order("sort_order").order("name");
   if (error) throw new Error("Unable to load collections.", { cause: error });
   return data;
 });
