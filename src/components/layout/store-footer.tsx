@@ -11,8 +11,23 @@ export function StoreFooter() {
           <Wordmark inverse />
           <p className="max-w-sm font-display text-2xl text-ivory/80">{siteConfig.tagline}</p>
         </div>
-        <div><p className="text-xs tracking-[.15em] text-champagne uppercase">Discover</p><nav className="mt-5 space-y-3 text-sm text-ivory/70"><Link className="block hover:text-white" href="/shop">Shop</Link><Link className="block hover:text-white" href="/collections">Collections</Link><Link className="block hover:text-white" href="/brands">Brands</Link><Link className="block hover:text-white" href="/journal">Journal</Link></nav></div>
-        <div><p className="text-xs tracking-[.15em] text-champagne uppercase">Concierge</p><nav className="mt-5 space-y-3 text-sm text-ivory/70"><Link className="block hover:text-white" href="/contact">Contact</Link><Link className="block hover:text-white" href="/track-order">Track order</Link><Link className="block hover:text-white" href="/about">Our story</Link><Link className="block hover:text-white" href="/account">My account</Link></nav></div>
+        <div>
+          <p className="text-xs tracking-[.15em] text-champagne uppercase">Discover</p>
+          <nav className="mt-5 space-y-3 text-sm text-ivory/70">
+            <Link className="block transition-colors hover:text-white" href="/shop">Shop Fragrances</Link>
+            <Link className="block transition-colors hover:text-white" href="/collections">Collections</Link>
+            <Link className="block transition-colors hover:text-white" href="/discovery">Scent Finder</Link>
+            <Link className="block transition-colors hover:text-white" href="/search">Search Catalogue</Link>
+          </nav>
+        </div>
+        <div>
+          <p className="text-xs tracking-[.15em] text-champagne uppercase">Concierge</p>
+          <nav className="mt-5 space-y-3 text-sm text-ivory/70">
+            <Link className="block transition-colors hover:text-white" href="/contact">Contact Us</Link>
+            <Link className="block transition-colors hover:text-white" href="/track-order">Track an Order</Link>
+            <Link className="block transition-colors hover:text-white" href="/about">Our Story</Link>
+          </nav>
+        </div>
         <p className="self-end text-xs tracking-wide text-ivory/60">© {new Date().getFullYear()} Solure Scents.<br/>All rights reserved.</p>
       </div>
     </footer>

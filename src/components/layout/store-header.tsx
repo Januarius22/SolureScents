@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Mail, Menu, MessageCircle, Search, ShoppingBag, UserRound, X } from "lucide-react";
+import { Mail, Menu, MessageCircle, Search, ShoppingBag, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -13,8 +13,6 @@ const navigation = [
   { href: "/discovery", label: "Scent Finder" },
   { href: "/shop", label: "Shop" },
   { href: "/collections", label: "Collections" },
-  { href: "/brands", label: "Brands" },
-  { href: "/journal", label: "Journal" },
   { href: "/contact", label: "Contact Us" },
 ] as const;
 
@@ -224,16 +222,9 @@ export function StoreHeader() {
           <Link
             href="/search"
             aria-label="Search fragrances"
-            className="hidden size-11 items-center justify-center transition-colors hover:text-gold sm:inline-flex"
+            className="size-11 inline-flex items-center justify-center transition-colors hover:text-gold"
           >
             <Search aria-hidden="true" size={19} strokeWidth={1.5} />
-          </Link>
-          <Link
-            href="/account"
-            aria-label="Your account"
-            className="hidden size-11 items-center justify-center transition-colors hover:text-gold sm:inline-flex"
-          >
-            <UserRound aria-hidden="true" size={19} strokeWidth={1.5} />
           </Link>
           <Link
             href="/cart"
@@ -300,23 +291,15 @@ export function StoreHeader() {
                 })}
               </div>
 
-              {/* Mobile Quick Action Buttons: Search & Account */}
-              <div className="mt-6 grid grid-cols-2 gap-3 border-t pt-6 sm:hidden">
+              {/* Mobile Quick Action Button: Search */}
+              <div className="mt-6 border-t pt-6 sm:hidden">
                 <Link
                   href="/search"
                   onClick={closeMenu}
-                  className="flex items-center justify-center gap-2 border border-charcoal/20 py-3 text-xs tracking-[0.12em] uppercase transition-colors hover:border-gold hover:text-gold"
+                  className="flex w-full items-center justify-center gap-2 border border-charcoal/20 py-3 text-xs tracking-[0.12em] uppercase transition-colors hover:border-gold hover:text-gold"
                 >
                   <Search aria-hidden="true" size={15} />
-                  <span>Search</span>
-                </Link>
-                <Link
-                  href="/account"
-                  onClick={closeMenu}
-                  className="flex items-center justify-center gap-2 border border-charcoal/20 py-3 text-xs tracking-[0.12em] uppercase transition-colors hover:border-gold hover:text-gold"
-                >
-                  <UserRound aria-hidden="true" size={15} />
-                  <span>Account</span>
+                  <span>Search Fragrances</span>
                 </Link>
               </div>
 
