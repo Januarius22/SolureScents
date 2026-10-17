@@ -1,8 +1,10 @@
 "use client";
 
-import { Mail, Menu, MessageCircle, Search, ShoppingBag, UserRound } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Mail, Menu, MessageCircle, Search, ShoppingBag, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import { Wordmark } from "@/components/brand/wordmark";
 
@@ -16,7 +18,6 @@ const navigation = [
   { href: "/contact", label: "Contact Us" },
 ] as const;
 
-// Placeholder destinations: replace these when the brand accounts go live.
 const contactLinks = {
   whatsapp: "https://wa.me/2348000000000",
   instagram: "https://www.instagram.com/solurescents/",
@@ -33,51 +34,168 @@ function InstagramIcon() {
   );
 }
 
-function ContactIcons({ mobile = false }: { mobile?: boolean }) {
+function ContactIcons({
+  mobile = false,
+  onItemClick,
+}: {
+  mobile?: boolean;
+  onItemClick?: () => void;
+}) {
   const className = mobile
-    ? "inline-flex size-11 items-center justify-center border transition-colors hover:border-gold hover:text-gold"
+    ? "inline-flex size-11 items-center justify-center border border-charcoal/20 bg-pearl transition-colors hover:border-gold hover:text-gold"
     : "inline-flex size-9 items-center justify-center transition-colors hover:text-gold";
 
   return (
-    <div className={mobile ? "mt-6 flex items-center gap-2" : "hidden items-center lg:flex"} aria-label="Contact Solure" role="group">
-      <a href={contactLinks.whatsapp} aria-label="Chat with Solure on WhatsApp" className={className} rel="noreferrer" target="_blank">
+    <div
+      className={mobile ? "mt-7 flex items-center gap-3" : "hidden items-center lg:flex"}
+      aria-label="Contact Solure"
+      role="group"
+    >
+      <a
+        href={contactLinks.whatsapp}
+        aria-label="Chat with Solure on WhatsApp"
+        className={className}
+        rel="noreferrer"
+        target="_blank"
+        onClick={onItemClick}
+      >
         <MessageCircle aria-hidden="true" size={18} strokeWidth={1.5} />
       </a>
-      <a href={contactLinks.instagram} aria-label="Follow Solure on Instagram" className={className} rel="noreferrer" target="_blank">
+      <a
+        href={contactLinks.instagram}
+        aria-label="Follow Solure on Instagram"
+        className={className}
+        rel="noreferrer"
+        target="_blank"
+        onClick={onItemClick}
+      >
         <InstagramIcon />
       </a>
-      <a href={contactLinks.email} aria-label="Email the Solure concierge" className={className}>
+      <a
+        href={contactLinks.email}
+        aria-label="Email the Solure concierge"
+        className={className}
+        onClick={onItemClick}
+      >
         <Mail aria-hidden="true" size={18} strokeWidth={1.5} />
       </a>
     </div>
   );
 }
 
-/** Public-store navigation, intentionally isolated from all authenticated apps. */
+/** Public-store navigation with auto-closing mobile menu on scroll, route changes, and outside clicks. */
 export function StoreHeader() {
   const pathname = usePathname();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const isActive = (href: (typeof navigation)[number]["href"]) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+    href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+
+  const closeMenu = () => setIsOpen(false);
+
+  // Automatically close mobile menu when pathname changes (React recommended render-time adjustment)
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
+    setIsOpen(false);
+  }
+
+  // Handle scroll behavior: update header elevation and auto-close mobile drawer on scroll
+  useEffect(() => {
+    let lastScrollY = window.scrollY;
+
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      setIsScrolled(currentScrollY > 18);
+
+      // Auto-close menu if open and user scrolls more than 12px
+      if (Math.abs(currentScrollY - lastScrollY) > 12) {
+        setIsOpen(false);
+        lastScrollY = currentScrollY;
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-pearl/95 backdrop-blur-xl">
-      <div className="bg-charcoal px-3 py-2 text-center text-[0.54rem] tracking-[0.1em] text-pearl uppercase sm:px-4 sm:text-[0.62rem] sm:tracking-[0.16em]">Complimentary consultation with every order</div>
-      <div className="mx-auto flex h-20 max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-12">
-        <details className="relative xl:hidden">
-          <summary className="flex size-11 cursor-pointer list-none items-center justify-center" aria-label="Open menu">
-            <Menu aria-hidden="true" size={20} strokeWidth={1.5} />
-          </summary>
-          <nav className="absolute -left-5 top-14 w-screen border-b bg-pearl p-6 shadow-soft sm:-left-8 lg:-left-12" aria-label="Mobile store navigation">
-            {navigation.map((item) => {
-              const active = isActive(item.href);
+    <header
+      className={`sticky top-0 z-40 border-b transition-shadow duration-300 bg-pearl/95 backdrop-blur-xl ${
+        isScrolled ? "shadow-[0_8px_30px_rgba(29,27,25,0.06)] border-charcoal/10" : "border-border/60"
+      }`}
+    >
+      <div className="bg-charcoal px-3 py-2 text-center text-[0.54rem] tracking-[0.1em] text-pearl uppercase sm:px-4 sm:text-[0.62rem] sm:tracking-[0.16em]">
+        Complimentary consultation with every order
+      </div>
 
-              return <Link aria-current={active ? "page" : undefined} key={item.href} className={`block border-b py-4 text-sm tracking-[0.12em] uppercase transition-colors ${active ? "border-gold text-gold" : "hover:text-gold"}`} href={item.href}>{item.label}</Link>;
-            })}
-            <ContactIcons mobile />
-          </nav>
-        </details>
+      <div className="mx-auto flex h-20 max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-12">
+        {/* Mobile menu trigger */}
+        <div className="xl:hidden">
+          <button
+            type="button"
+            onClick={() => setIsOpen((prev) => !prev)}
+            aria-expanded={isOpen}
+            aria-controls="mobile-store-nav"
+            aria-label={isOpen ? "Close menu" : "Open menu"}
+            className="flex size-11 items-center justify-center rounded-sm transition-colors hover:bg-charcoal/5"
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              {isOpen ? (
+                <motion.span
+                  key="close"
+                  initial={{ rotate: -90, opacity: 0 }}
+                  animate={{ rotate: 0, opacity: 1 }}
+                  exit={{ rotate: 90, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-center justify-center text-gold"
+                >
+                  <X aria-hidden="true" size={22} strokeWidth={1.5} />
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="menu"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-center justify-center text-charcoal"
+                >
+                  <Menu aria-hidden="true" size={22} strokeWidth={1.5} />
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+        </div>
+
         <Wordmark />
+
+        {/* Desktop Navigation */}
         <nav aria-label="Store navigation" className="hidden items-center gap-6 xl:flex 2xl:gap-9">
           {navigation.map((item) => {
             const active = isActive(item.href);
@@ -87,27 +205,136 @@ export function StoreHeader() {
                 aria-current={active ? "page" : undefined}
                 key={item.href}
                 href={item.href}
-                className={`relative py-2 text-xs font-medium tracking-[0.13em] uppercase transition-colors after:absolute after:inset-x-0 after:-bottom-0.5 after:h-px after:origin-left after:bg-gold after:transition-transform ${active ? "text-gold after:scale-x-100" : "after:scale-x-0 hover:text-gold hover:after:scale-x-100"}`}
+                className={`relative py-2 text-xs font-medium tracking-[0.13em] uppercase transition-colors after:absolute after:inset-x-0 after:-bottom-0.5 after:h-px after:origin-left after:bg-gold after:transition-transform ${
+                  active
+                    ? "text-gold after:scale-x-100"
+                    : "after:scale-x-0 hover:text-gold hover:after:scale-x-100"
+                }`}
               >
                 {item.label}
               </Link>
             );
           })}
         </nav>
+
+        {/* Action icons */}
         <div className="flex items-center gap-1">
           <ContactIcons />
           <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-charcoal/15 lg:block" />
-          <Link href="/search" aria-label="Search" className="hidden size-11 items-center justify-center sm:inline-flex">
+          <Link
+            href="/search"
+            aria-label="Search fragrances"
+            className="hidden size-11 items-center justify-center transition-colors hover:text-gold sm:inline-flex"
+          >
             <Search aria-hidden="true" size={19} strokeWidth={1.5} />
           </Link>
-          <Link href="/account" aria-label="Your account" className="hidden size-11 items-center justify-center sm:inline-flex">
+          <Link
+            href="/account"
+            aria-label="Your account"
+            className="hidden size-11 items-center justify-center transition-colors hover:text-gold sm:inline-flex"
+          >
             <UserRound aria-hidden="true" size={19} strokeWidth={1.5} />
           </Link>
-          <Link href="/cart" aria-label="Shopping bag" className="inline-flex size-11 items-center justify-center">
+          <Link
+            href="/cart"
+            aria-label="Shopping bag"
+            className="inline-flex size-11 items-center justify-center transition-colors hover:text-gold"
+          >
             <ShoppingBag aria-hidden="true" size={19} strokeWidth={1.5} />
           </Link>
         </div>
       </div>
+
+      {/* Animated Mobile Navigation Drawer & Backdrop */}
+      <AnimatePresence>
+        {isOpen && (
+          <div ref={menuRef} className="xl:hidden">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              onClick={closeMenu}
+              aria-hidden="true"
+              className="fixed inset-0 top-[calc(5rem+1.8rem)] z-40 bg-charcoal/45 backdrop-blur-sm"
+            />
+
+            {/* Menu Panel */}
+            <motion.nav
+              id="mobile-store-nav"
+              aria-label="Mobile store navigation"
+              initial={{ opacity: 0, y: -16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              className="fixed inset-x-0 top-[calc(5rem+1.8rem)] z-50 max-h-[calc(100svh-7rem)] overflow-y-auto border-b border-charcoal/15 bg-pearl p-6 shadow-2xl sm:p-8"
+            >
+              <div className="flex items-center justify-between border-b pb-4">
+                <span className="text-[0.62rem] font-semibold tracking-[0.24em] text-gold uppercase">
+                  Menu · Navigation
+                </span>
+                <span className="text-[0.62rem] tracking-[0.16em] text-muted uppercase">
+                  Solure Scents
+                </span>
+              </div>
+
+              <div className="divide-y divide-border/60">
+                {navigation.map((item) => {
+                  const active = isActive(item.href);
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={closeMenu}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex items-center justify-between py-4 text-sm font-medium tracking-[0.14em] uppercase transition-colors ${
+                        active ? "text-gold font-semibold" : "text-charcoal hover:text-gold"
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      {active && <span className="size-1.5 rounded-full bg-gold" aria-hidden="true" />}
+                    </Link>
+                  );
+                })}
+              </div>
+
+              {/* Mobile Quick Action Buttons: Search & Account */}
+              <div className="mt-6 grid grid-cols-2 gap-3 border-t pt-6 sm:hidden">
+                <Link
+                  href="/search"
+                  onClick={closeMenu}
+                  className="flex items-center justify-center gap-2 border border-charcoal/20 py-3 text-xs tracking-[0.12em] uppercase transition-colors hover:border-gold hover:text-gold"
+                >
+                  <Search aria-hidden="true" size={15} />
+                  <span>Search</span>
+                </Link>
+                <Link
+                  href="/account"
+                  onClick={closeMenu}
+                  className="flex items-center justify-center gap-2 border border-charcoal/20 py-3 text-xs tracking-[0.12em] uppercase transition-colors hover:border-gold hover:text-gold"
+                >
+                  <UserRound aria-hidden="true" size={15} />
+                  <span>Account</span>
+                </Link>
+              </div>
+
+              {/* Contact and Concierge info */}
+              <div className="mt-8 border-t pt-6">
+                <p className="text-[0.6rem] font-semibold tracking-[0.2em] text-gold uppercase">
+                  Concierge assistance
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  Private consultations available Monday to Saturday.
+                </p>
+                <ContactIcons mobile onItemClick={closeMenu} />
+              </div>
+            </motion.nav>
+          </div>
+        )}
+      </AnimatePresence>
     </header>
   );
 }
+
