@@ -1,8 +1,33 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import type { LucideIcon } from "lucide-react";
-import { LogOut, Menu, X } from "lucide-react";
+import {
+  BarChart3,
+  Bell,
+  Boxes,
+  CalendarClock,
+  CreditCard,
+  FilePenLine,
+  Files,
+  FolderTree,
+  Gift,
+  Heart,
+  House,
+  Image,
+  LayoutDashboard,
+  LogOut,
+  MapPin,
+  Menu,
+  Package,
+  SearchCheck,
+  Settings,
+  ShoppingCart,
+  Star,
+  UserRound,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
@@ -10,9 +35,40 @@ import { type ReactNode, useState } from "react";
 import { Wordmark } from "@/components/brand/wordmark";
 import { logoutAction } from "@/features/auth/actions/auth";
 
+const ICON_MAP: Record<string, LucideIcon> = {
+  BarChart3,
+  Bell,
+  Boxes,
+  CalendarClock,
+  CreditCard,
+  FilePenLine,
+  Files,
+  FolderTree,
+  Gift,
+  Heart,
+  House,
+  Image,
+  LayoutDashboard,
+  MapPin,
+  Package,
+  SearchCheck,
+  Settings,
+  ShoppingCart,
+  Star,
+  UserRound,
+  Users,
+};
+
+function resolveNavIcon(icon: string | LucideIcon): LucideIcon {
+  if (typeof icon === "function" || (typeof icon === "object" && icon !== null)) {
+    return icon as LucideIcon;
+  }
+  return ICON_MAP[icon] ?? LayoutDashboard;
+}
+
 export interface DashboardNavItem {
   href: string;
-  icon: LucideIcon;
+  icon: string | LucideIcon;
   label: string;
 }
 
@@ -47,7 +103,8 @@ export function DashboardShell({ appName, children, navigation, userEmail }: Das
           </div>
 
           <nav aria-label={`${appName} navigation`} className="mt-10 space-y-1.5">
-            {navigation.map(({ href, icon: Icon, label }) => {
+            {navigation.map(({ href, icon, label }) => {
+              const Icon = resolveNavIcon(icon);
               const active = isActive(href);
               return (
                 <Link
@@ -177,7 +234,8 @@ export function DashboardShell({ appName, children, navigation, userEmail }: Das
                 </div>
 
                 <nav aria-label="Mobile admin navigation" className="mt-8 space-y-1">
-                  {navigation.map(({ href, icon: Icon, label }) => {
+                  {navigation.map(({ href, icon, label }) => {
+                    const Icon = resolveNavIcon(icon);
                     const active = isActive(href);
                     return (
                       <Link

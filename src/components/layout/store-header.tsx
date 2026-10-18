@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Wordmark } from "@/components/brand/wordmark";
+import { useCart } from "@/features/cart/context/cart-context";
 
 const navigation = [
   { href: "/", label: "Home" },
@@ -84,6 +85,8 @@ function ContactIcons({
 /** Public-store navigation with auto-closing mobile menu on scroll, route changes, and outside clicks. */
 export function StoreHeader() {
   const pathname = usePathname();
+  const { openCart, cart } = useCart();
+  const itemCount = cart?.itemCount ?? 0;
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -148,11 +151,11 @@ export function StoreHeader() {
         isScrolled ? "shadow-[0_8px_30px_rgba(29,27,25,0.06)] border-charcoal/10" : "border-border/60"
       }`}
     >
-      <div className="bg-charcoal px-3 py-2 text-center text-[0.54rem] tracking-[0.1em] text-pearl uppercase sm:px-4 sm:text-[0.62rem] sm:tracking-[0.16em]">
+      <div className="bg-charcoal px-3 py-1.5 text-center text-[0.52rem] tracking-[0.1em] text-pearl uppercase sm:px-4 sm:text-[0.6rem] sm:tracking-[0.16em]">
         Complimentary consultation with every order
       </div>
 
-      <div className="mx-auto flex h-20 max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-12">
+      <div className="mx-auto flex h-16 sm:h-[4.25rem] max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-12">
         {/* Mobile menu trigger */}
         <div className="xl:hidden">
           <button
@@ -226,13 +229,19 @@ export function StoreHeader() {
           >
             <Search aria-hidden="true" size={19} strokeWidth={1.5} />
           </Link>
-          <Link
-            href="/cart"
-            aria-label="Shopping bag"
-            className="inline-flex size-11 items-center justify-center transition-colors hover:text-gold"
+          <button
+            type="button"
+            onClick={openCart}
+            aria-label={`Shopping bag with ${itemCount} ${itemCount === 1 ? "item" : "items"}`}
+            className="relative inline-flex size-11 items-center justify-center transition-colors hover:text-gold"
           >
             <ShoppingBag aria-hidden="true" size={19} strokeWidth={1.5} />
-          </Link>
+            {itemCount > 0 && (
+              <span className="absolute right-1.5 top-1.5 flex size-4 items-center justify-center rounded-full bg-gold text-[0.55rem] font-bold text-charcoal">
+                {itemCount > 9 ? "9+" : itemCount}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -248,7 +257,7 @@ export function StoreHeader() {
               transition={{ duration: 0.25 }}
               onClick={closeMenu}
               aria-hidden="true"
-              className="fixed inset-0 top-[calc(5rem+1.8rem)] z-40 bg-charcoal/45 backdrop-blur-sm"
+              className="fixed inset-0 top-[calc(4rem+1.6rem)] sm:top-[calc(4.25rem+1.6rem)] z-40 bg-charcoal/45 backdrop-blur-sm"
             />
 
             {/* Menu Panel */}
@@ -259,7 +268,7 @@ export function StoreHeader() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -16 }}
               transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              className="fixed inset-x-0 top-[calc(5rem+1.8rem)] z-50 max-h-[calc(100svh-7rem)] overflow-y-auto border-b border-charcoal/15 bg-pearl p-6 shadow-2xl sm:p-8"
+              className="fixed inset-x-0 top-[calc(4rem+1.6rem)] sm:top-[calc(4.25rem+1.6rem)] z-50 max-h-[calc(100svh-6rem)] overflow-y-auto border-b border-charcoal/15 bg-pearl p-6 shadow-2xl sm:p-8"
             >
               <div className="flex items-center justify-between border-b pb-4">
                 <span className="text-[0.62rem] font-semibold tracking-[0.24em] text-gold uppercase">

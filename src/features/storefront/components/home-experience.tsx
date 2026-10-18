@@ -102,16 +102,16 @@ export function HomeExperience({ description }: HomeExperienceProps) {
     <div className="overflow-clip bg-pearl">
       <section
         ref={heroRef}
-        className="relative isolate min-h-[calc(100svh-7rem)] overflow-hidden border-b"
+        className="relative isolate min-h-[calc(100svh-5.5rem)] overflow-hidden border-b"
       >
         <div
           aria-hidden="true"
           className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_72%_28%,rgba(201,169,110,0.13),transparent_31%),linear-gradient(115deg,#fbfaf7_0%,#fbfaf7_53%,#f1eadf_53%,#f1eadf_100%)]"
         />
 
-        <div className="mx-auto grid min-h-[calc(100svh-7rem)] max-w-[90rem] lg:grid-cols-[1.08fr_0.92fr]">
+        <div className="mx-auto grid min-h-[calc(100svh-5.5rem)] max-w-[90rem] lg:grid-cols-[1.08fr_0.92fr]">
           <motion.div
-            className="relative z-10 flex items-center px-5 py-20 sm:px-8 lg:px-12 lg:py-24"
+            className="relative z-10 flex items-center px-5 pt-8 pb-16 sm:px-8 sm:pt-10 sm:pb-20 lg:px-12 lg:pt-10 lg:pb-20"
             style={reduceMotion ? undefined : { y: copyY, opacity: copyOpacity }}
           >
             <div className="max-w-4xl">

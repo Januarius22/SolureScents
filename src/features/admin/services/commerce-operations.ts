@@ -9,6 +9,8 @@ export interface AdminProductWithVariants {
   concentration: string;
   status: string;
   created_at: string;
+  brand_name?: string;
+  primary_image_url?: string | null;
   variants: {
     id: string;
     label: string;
@@ -37,16 +39,17 @@ export interface AdminCustomerSummary {
 export async function getCommerceOperations() {
   await requireApplicationAccess("admin");
   const db = await createServerSupabaseClient();
-  const [orders, payments, levels, locations, variants, products] = await Promise.all([
+  const [orders, payments, levels, locations, variants, products, orderItems] = await Promise.all([
     db.from("orders").select("*").order("created_at", { ascending: false }),
     db.from("payments").select("*").order("created_at", { ascending: false }),
     db.from("inventory_levels").select("*").order("updated_at", { ascending: false }),
     db.from("inventory_locations").select("*").eq("is_active", true),
     db.from("product_variants").select("id, product_id, label, sku, size_ml, price_minor, currency, is_available, low_stock_limit"),
     db.from("products").select("id, name, slug, concentration, status"),
+    db.from("order_items").select("*"),
   ]);
 
-  for (const result of [orders, payments, levels, locations, variants, products]) {
+  for (const result of [orders, payments, levels, locations, variants, products, orderItems]) {
     if (result.error) throw new Error("Unable to load commerce operations.", { cause: result.error });
   }
 
@@ -57,6 +60,7 @@ export async function getCommerceOperations() {
     locations: locations.data ?? [],
     variants: variants.data ?? [],
     products: products.data ?? [],
+    orderItems: orderItems.data ?? [],
   };
 }
 
@@ -64,14 +68,25 @@ export async function getAdminProducts(): Promise<AdminProductWithVariants[]> {
   await requireApplicationAccess("admin");
   const db = await createServerSupabaseClient();
 
-  const [productsRes, variantsRes, levelsRes] = await Promise.all([
-    db.from("products").select("id, name, slug, subtitle, concentration, status, created_at").order("name"),
+  const [productsRes, variantsRes, levelsRes, brandsRes, mediaRes] = await Promise.all([
+    db.from("products").select("id, brand_id, name, slug, subtitle, concentration, status, created_at").order("name"),
     db.from("product_variants").select("id, product_id, label, sku, size_ml, price_minor, currency, is_available, low_stock_limit").order("size_ml"),
     db.from("inventory_levels").select("variant_id, on_hand, reserved"),
+    db.from("brands").select("id, name"),
+    db.from("product_media").select("product_id, storage_path, is_primary").order("sort_order"),
   ]);
 
   if (productsRes.error || variantsRes.error || levelsRes.error) {
     throw new Error("Unable to load product catalogue.", { cause: productsRes.error ?? variantsRes.error ?? levelsRes.error });
+  }
+
+  const brandsMap = new Map((brandsRes.data ?? []).map((b) => [b.id, b.name]));
+
+  const mediaByProduct = new Map<string, string>();
+  for (const m of mediaRes.data ?? []) {
+    if (m.is_primary || !mediaByProduct.has(m.product_id)) {
+      mediaByProduct.set(m.product_id, m.storage_path);
+    }
   }
 
   const stockByVariant = new Map<string, { on_hand: number; reserved: number }>();
@@ -110,6 +125,8 @@ export async function getAdminProducts(): Promise<AdminProductWithVariants[]> {
     concentration: p.concentration,
     status: p.status,
     created_at: p.created_at,
+    brand_name: brandsMap.get(p.brand_id) ?? "Solure Scents",
+    primary_image_url: mediaByProduct.get(p.id) ?? null,
     variants: variantsByProduct.get(p.id) ?? [],
   }));
 }

@@ -104,8 +104,20 @@ export async function listPublishedProducts(input: ProductFilters): Promise<Pagi
   if (filters.minimumPriceMinor !== undefined) variantQuery = variantQuery.gte("price_minor", filters.minimumPriceMinor);
   if (filters.maximumPriceMinor !== undefined) variantQuery = variantQuery.lte("price_minor", filters.maximumPriceMinor);
 
-  const { data: variants, error: variantError } = await variantQuery;
+  const [variantRes, mediaRes] = await Promise.all([
+    variantQuery,
+    supabase.from("product_media").select("product_id, storage_path, is_primary").in("product_id", productIds).order("sort_order"),
+  ]);
+
+  const { data: variants, error: variantError } = variantRes;
   if (variantError) throw new Error("Unable to load product variants.", { cause: variantError });
+
+  const mediaByProduct = new Map<string, string>();
+  for (const m of mediaRes.data ?? []) {
+    if (m.is_primary || !mediaByProduct.has(m.product_id)) {
+      mediaByProduct.set(m.product_id, m.storage_path);
+    }
+  }
 
   const variantsByProduct = new Map<string, ProductVariantSummary[]>();
   for (const variant of variants) {
@@ -130,6 +142,7 @@ export async function listPublishedProducts(input: ProductFilters): Promise<Pagi
         name: product.name,
         slug: product.slug,
         subtitle: product.subtitle,
+        primaryImageUrl: mediaByProduct.get(product.id) ?? null,
         variants: variantsByProduct.get(product.id) ?? [],
       })),
     page: filters.page,

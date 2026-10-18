@@ -32,15 +32,16 @@ const statusColors: Record<string, string> = {
 export default async function AdminDashboardPage() {
   const operations = await getCommerceOperations();
 
-  const activeOrders = operations.orders.filter(
-    (o) => !["cancelled", "refunded"].includes(o.status),
+  // Count only authoritatively paid orders towards completed gross revenue
+  const paidOrders = operations.orders.filter((o) =>
+    ["confirmed", "processing", "shipped", "delivered"].includes(o.status),
   );
 
-  const grossRevenue = activeOrders.reduce((sum, o) => sum + Number(o.total_minor), 0);
+  const grossRevenue = paidOrders.reduce((sum, o) => sum + Number(o.total_minor), 0);
   const primaryCurrency = operations.orders[0]?.currency ?? "NGN";
 
   const pendingFulfillment = operations.orders.filter(
-    (o) => o.status === "confirmed" || o.status === "processing" || o.status === "pending",
+    (o) => o.status === "confirmed" || o.status === "processing",
   ).length;
 
   const deliveredCount = operations.orders.filter((o) => o.status === "delivered").length;
@@ -118,7 +119,7 @@ export default async function AdminDashboardPage() {
             <Money amount={grossRevenue} currency={primaryCurrency} />
           </p>
           <p className="mt-2 text-xs text-muted">
-            {activeOrders.length} active customer orders
+            {paidOrders.length} paid customer orders
           </p>
         </div>
 

@@ -19,3 +19,7 @@ export class PaymentGatewayRegistry {
 }
 
 export const paymentGateways = new PaymentGatewayRegistry();
+
+import { paystackGateway } from "./paystack-gateway";
+paymentGateways.register(paystackGateway);
+

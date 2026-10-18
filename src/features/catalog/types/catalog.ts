@@ -23,5 +23,6 @@ export interface ProductSummary {
   name: string;
   slug: string;
   subtitle: string | null;
+  primaryImageUrl?: string | null;
   variants: ProductVariantSummary[];
 }

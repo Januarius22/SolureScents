@@ -45,7 +45,21 @@ const statusBadgeClasses: Record<string, string> = {
 };
 
 export default async function AdminOrdersPage() {
-  const { orders } = await getCommerceOperations();
+  const { orders, payments, orderItems } = await getCommerceOperations();
+
+  const itemsByOrder = new Map<string, typeof orderItems>();
+  for (const item of orderItems) {
+    const list = itemsByOrder.get(item.order_id) ?? [];
+    list.push(item);
+    itemsByOrder.set(item.order_id, list);
+  }
+
+  const paymentsByOrder = new Map<string, typeof payments>();
+  for (const p of payments) {
+    const list = paymentsByOrder.get(p.order_id) ?? [];
+    list.push(p);
+    paymentsByOrder.set(p.order_id, list);
+  }
 
   const pendingCount = orders.filter((o) => o.status === "pending" || o.status === "confirmed").length;
   const processingCount = orders.filter((o) => o.status === "processing").length;
@@ -123,11 +137,30 @@ export default async function AdminOrdersPage() {
               ? (order.shipping_address as Record<string, unknown>)
               : {};
 
-          const recipientName = typeof shipping.name === "string" ? shipping.name : undefined;
-          const addressLine1 = typeof shipping.line1 === "string" ? shipping.line1 : undefined;
-          const city = typeof shipping.city === "string" ? shipping.city : undefined;
+          const recipientName =
+            typeof shipping.recipientName === "string"
+              ? shipping.recipientName
+              : typeof shipping.name === "string"
+              ? shipping.name
+              : undefined;
+          const addressLine1 =
+            typeof shipping.streetAddress === "string"
+              ? shipping.streetAddress
+              : typeof shipping.line1 === "string"
+              ? shipping.line1
+              : undefined;
+          const city =
+            typeof shipping.cityOrLga === "string"
+              ? shipping.cityOrLga
+              : typeof shipping.city === "string"
+              ? shipping.city
+              : undefined;
           const state = typeof shipping.state === "string" ? shipping.state : undefined;
           const phone = typeof shipping.phone === "string" ? shipping.phone : undefined;
+
+          const orderProducts = itemsByOrder.get(order.id) ?? [];
+          const orderPayments = paymentsByOrder.get(order.id) ?? [];
+          const latestPayment = orderPayments[0];
 
           return (
             <article
@@ -149,10 +182,21 @@ export default async function AdminOrdersPage() {
                     <span className="border border-charcoal/15 bg-ivory px-2.5 py-0.5 rounded text-[0.62rem] font-medium uppercase text-charcoal/70">
                       Fulfillment: {order.fulfillment_status.replace("_", " ")}
                     </span>
+                    {latestPayment && (
+                      <span className={`border px-2.5 py-0.5 rounded text-[0.62rem] font-medium uppercase ${
+                        latestPayment.status === "captured"
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                          : latestPayment.status === "pending"
+                          ? "border-amber-300 bg-amber-50 text-amber-800"
+                          : "border-rose-300 bg-rose-50 text-rose-800"
+                      }`}>
+                        Payment: {latestPayment.status} ({latestPayment.provider_reference || latestPayment.provider})
+                      </span>
+                    )}
                   </div>
 
                   <p className="mt-2 text-xs text-muted">
-                    Customer: <b className="text-charcoal font-medium">{order.customer_email}</b> · Placed:{" "}
+                    Customer: <b className="text-charcoal font-medium">{recipientName ? `${recipientName} (${order.customer_email})` : order.customer_email}</b> · Placed:{" "}
                     {new Date(order.created_at).toLocaleString("en-NG", {
                       month: "short",
                       day: "numeric",
@@ -172,6 +216,31 @@ export default async function AdminOrdersPage() {
                   </p>
                 </div>
               </div>
+
+              {/* Purchased Fragrances and Quantities */}
+              {orderProducts.length > 0 && (
+                <div className="mt-4 border-b border-charcoal/10 pb-4">
+                  <p className="text-[0.62rem] font-semibold tracking-wider text-muted uppercase mb-2">
+                    Purchased Fragrances ({orderProducts.reduce((s, i) => s + i.quantity, 0)} flacons)
+                  </p>
+                  <div className="space-y-1.5 divide-y divide-charcoal/5">
+                    {orderProducts.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between pt-1.5 text-xs text-charcoal">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{item.product_name}</span>
+                          <span className="text-muted">({item.variant_label})</span>
+                          <span className="rounded bg-ivory px-2 py-0.5 font-mono text-[11px] font-semibold">
+                            × {item.quantity}
+                          </span>
+                        </div>
+                        <span className="font-mono font-medium">
+                          <Money amount={item.unit_price_minor * item.quantity} currency={item.currency} />
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Shipping Address details */}
               {(recipientName || addressLine1 || city) && (

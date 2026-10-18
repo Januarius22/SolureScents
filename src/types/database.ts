@@ -102,6 +102,26 @@ export interface Database {
         status: Database["public"]["Enums"]["variant_status"];
         weight_grams: number;
       }>;
+      product_media: TableDefinition<AuditColumns & {
+        alt_text: string;
+        is_primary: boolean;
+        media_type: "image" | "video";
+        product_id: string;
+        sort_order: number;
+        storage_path: string;
+      }>;
+      fragrance_notes: TableDefinition<AuditColumns & {
+        description: string | null;
+        image_path: string | null;
+        name: string;
+        slug: string;
+      }>;
+      product_notes: TableDefinition<AuditColumns & {
+        note_id: string;
+        position: "top" | "heart" | "base";
+        product_id: string;
+        prominence: number;
+      }>;
       collection_products: TableDefinition<AuditColumns & {
         collection_id: string;
         product_id: string;
@@ -110,7 +130,8 @@ export interface Database {
       carts: TableDefinition<AuditColumns & {
         currency: string;
         expires_at: string;
-        profile_id: string;
+        profile_id: string | null;
+        session_token_hash?: string | null;
         status: Database["public"]["Enums"]["cart_status"];
       }>;
       cart_items: TableDefinition<AuditColumns & {
@@ -146,13 +167,44 @@ export interface Database {
         label: string; line_1: string; line_2: string | null; phone: string; postal_code: string | null;
         profile_id: string; recipient_name: string; state_region: string;
       }>;
+      shipping_zones: TableDefinition<AuditColumns & {
+        country_codes: string[];
+        is_active: boolean;
+        name: string;
+        state_regions: string[];
+      }>;
+      shipping_methods: TableDefinition<AuditColumns & {
+        code: string;
+        currency: string;
+        description: string | null;
+        estimated_days_max: number;
+        estimated_days_min: number;
+        is_active: boolean;
+        name: string;
+        price_minor: number;
+      }>;
+      shipping_zone_methods: TableDefinition<AuditColumns & {
+        maximum_subtotal_minor: number | null;
+        method_id: string;
+        minimum_subtotal_minor: number | null;
+        zone_id: string;
+      }>;
       orders: TableDefinition<AuditColumns & {
         billing_address: Json; cancelled_at: string | null; carrier: string | null; checkout_session_id: string | null;
         currency: string; customer_email: string; customer_note: string | null; delivered_at: string | null;
-        discount_minor: number; fulfillment_status: Database["public"]["Enums"]["fulfillment_status"];
-        order_number: string; placed_at: string | null; profile_id: string; shipped_at: string | null;
+        delivery_status?: "configured" | "pending" | "free";
+        discount_minor: number; expires_at?: string | null; fulfillment_status: Database["public"]["Enums"]["fulfillment_status"];
+        guest_access_token_hash?: string | null; guest_session_hash?: string | null;
+        inventory_status?: "pending" | "fulfilled" | "reconciliation_required";
+        is_total_settled?: boolean;
+        order_number: string; placed_at: string | null; profile_id: string | null; shipped_at: string | null;
         shipping_address: Json; shipping_minor: number; status: Database["public"]["Enums"]["order_status"];
         subtotal_minor: number; tax_minor: number; total_minor: number; tracking_number: string | null; tracking_url: string | null;
+      }>;
+      order_items: TableDefinition<AuditColumns & {
+        brand_name: string; currency: string; discount_minor: number; line_total_minor?: number;
+        order_id: string; product_name: string; quantity: number; sku: string;
+        unit_price_minor: number; variant_id: string | null; variant_label: string;
       }>;
       wishlist_items: TableDefinition<AuditColumns & { profile_id: string; product_id: string }>;
       reviews: TableDefinition<AuditColumns & {
@@ -176,10 +228,24 @@ export interface Database {
         actor_id: string | null; inventory_level_id: string; note: string | null; quantity_delta: number;
         reason: Database["public"]["Enums"]["inventory_movement_reason"]; reference_id: string | null; reference_type: string | null;
       }>;
+      inventory_reservations: TableDefinition<AuditColumns & {
+        expires_at: string;
+        inventory_level_id: string;
+        order_id: string;
+        quantity: number;
+        status: Database["public"]["Enums"]["inventory_reservation_status"];
+        variant_id: string;
+      }>;
       payments: TableDefinition<AuditColumns & {
         amount_minor: number; authorized_at: string | null; captured_at: string | null; currency: string; failed_at: string | null;
         failure_code: string | null; failure_message: string | null; idempotency_key: string; metadata: Json; order_id: string;
         provider: string; provider_reference: string | null; refunded_minor: number; status: Database["public"]["Enums"]["payment_status"];
+        channel?: string | null; customer_email?: string | null; gateway_response?: string | null; paid_at?: string | null;
+        reconciliation_reason?: string | null; requires_reconciliation?: boolean;
+      }>;
+      payment_webhooks: TableDefinition<AuditColumns & {
+        event_id: string; provider: string; event_type: string; reference: string | null; payload: Json;
+        processed: boolean; processed_at: string | null; error_message?: string | null;
       }>;
     };
     Views: Record<never, never>;
@@ -188,6 +254,18 @@ export interface Database {
       add_cart_item: {
         Args: { add_quantity: number; target_variant_id: string };
         Returns: Database["public"]["Tables"]["cart_items"]["Row"];
+      };
+      add_guest_cart_item: {
+        Args: { add_quantity: number; p_session_token_hash: string; target_variant_id: string };
+        Returns: Database["public"]["Tables"]["cart_items"]["Row"];
+      };
+      update_guest_cart_item: {
+        Args: { new_quantity: number; p_session_token_hash: string; target_item_id: string };
+        Returns: Database["public"]["Tables"]["cart_items"]["Row"] | null;
+      };
+      remove_guest_cart_item: {
+        Args: { p_session_token_hash: string; target_item_id: string };
+        Returns: boolean;
       };
       create_checkout_session: { Args: { target_cart_id: string }; Returns: string };
       get_variant_availability: {
@@ -205,12 +283,73 @@ export interface Database {
         Returns: Database["public"]["Tables"]["orders"]["Row"];
       };
       prepare_offline_payment: { Args: { target_order_id: string; payment_provider: string; payment_reference?: string | null }; Returns: Database["public"]["Tables"]["payments"]["Row"] };
+      prepare_guest_order_record: {
+        Args: {
+          p_guest_session_hash: string;
+          p_guest_access_token_hash: string;
+          p_customer_email: string;
+          p_shipping_address: Json;
+          p_billing_address: Json;
+          p_customer_note: string | null;
+          p_shipping_minor: number;
+          p_currency: string;
+          p_items: Json;
+          p_delivery_status?: string;
+          p_is_total_settled?: boolean;
+        };
+        Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
+      reserve_order_inventory: {
+        Args: { p_order_id: string; p_ttl_minutes?: number };
+        Returns: number;
+      };
+      release_order_inventory: {
+        Args: { p_order_id: string };
+        Returns: number;
+      };
+      release_expired_inventory_reservations: {
+        Args: Record<never, never>;
+        Returns: number;
+      };
+      initialize_order_payment: {
+        Args: {
+          p_order_id: string;
+          p_provider: string;
+          p_provider_reference: string;
+          p_amount_minor: number;
+          p_currency: string;
+          p_idempotency_key: string;
+          p_customer_email?: string | null;
+          p_metadata?: Json;
+        };
+        Returns: Database["public"]["Tables"]["payments"]["Row"];
+      };
+      finalize_paystack_successful_payment: {
+        Args: {
+          p_reference: string;
+          p_amount_minor: number;
+          p_currency: string;
+          p_gateway_response?: string | null;
+          p_channel?: string | null;
+          p_metadata?: Json;
+        };
+        Returns: Database["public"]["Tables"]["payments"]["Row"];
+      };
+      finalize_paystack_failed_payment: {
+        Args: {
+          p_reference: string;
+          p_failure_code?: string | null;
+          p_failure_message?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["payments"]["Row"];
+      };
     };
     Enums: {
       notification_kind: "system" | "order" | "account" | "reward" | "editorial";
       profile_status: "active" | "suspended" | "deactivated";
       cart_status: "active" | "converted" | "abandoned" | "expired";
       fragrance_concentration: "edc" | "edt" | "edp" | "parfum" | "extrait" | "oil";
+      note_position: "top" | "heart" | "base";
       product_status: "draft" | "active" | "archived";
       sillage_level: "intimate" | "moderate" | "strong" | "enormous";
       variant_status: "draft" | "active" | "discontinued";
@@ -219,6 +358,7 @@ export interface Database {
       review_status: "pending" | "published" | "rejected";
       reward_transaction_kind: "earned" | "redeemed" | "adjusted" | "expired";
       inventory_movement_reason: "receipt" | "sale" | "return" | "damage" | "correction" | "transfer_in" | "transfer_out";
+      inventory_reservation_status: "active" | "converted" | "released" | "expired";
       payment_status: "pending" | "requires_action" | "authorized" | "captured" | "partially_refunded" | "refunded" | "failed" | "cancelled";
     };
     CompositeTypes: Record<never, never>;

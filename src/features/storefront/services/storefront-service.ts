@@ -22,10 +22,27 @@ export const getProductBySlug = cache(async (slug: string) => {
   if (error) throw new Error("Unable to load this fragrance.", { cause: error });
   if (!product) return null;
 
-  const [{ data: brand, error: brandError }, { data: variants, error: variantError }] = await Promise.all([
+  const [{ data: brand, error: brandError }, { data: variants, error: variantError }, { data: media }, { data: notesData }] = await Promise.all([
     supabase.from("brands").select("name, slug").eq("id", product.brand_id).single(),
     supabase.from("product_variants").select("id, label, size_ml, sku, price_minor, compare_at_price_minor, currency, weight_grams").eq("product_id", product.id).eq("status", "active").eq("is_available", true).order("size_ml"),
+    supabase.from("product_media").select("storage_path, alt_text, is_primary, sort_order").eq("product_id", product.id).order("sort_order"),
+    supabase.from("product_notes").select("position, fragrance_notes(name)").eq("product_id", product.id),
   ]);
   if (brandError || variantError) throw new Error("Unable to load complete fragrance details.", { cause: brandError ?? variantError });
-  return { ...product, brand, variants };
+
+  const notes = {
+    top: [] as string[],
+    heart: [] as string[],
+    base: [] as string[],
+  };
+  for (const n of notesData ?? []) {
+    const noteName = (n.fragrance_notes as unknown as { name?: string })?.name;
+    if (noteName) {
+      if (n.position === "top") notes.top.push(noteName);
+      if (n.position === "heart") notes.heart.push(noteName);
+      if (n.position === "base") notes.base.push(noteName);
+    }
+  }
+
+  return { ...product, brand, variants, media: media ?? [], notes };
 });
