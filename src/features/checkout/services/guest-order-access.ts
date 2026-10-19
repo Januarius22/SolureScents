@@ -121,15 +121,20 @@ export async function getVerifiedGuestOrder(
       deliveryStatus?: DeliveryPricingStatus;
     };
 
-    const deliveryStatus = (order.delivery_status as DeliveryPricingStatus) ?? "pending";
+    const rawDeliveryStatus = (order.delivery_status as DeliveryPricingStatus) ?? shipping.deliveryStatus ?? "arranged_separately";
+    const deliveryStatus: DeliveryPricingStatus =
+      rawDeliveryStatus === "arranged_separately" || shipping.deliveryStatus === "arranged_separately"
+        ? "arranged_separately"
+        : rawDeliveryStatus;
+
     const isPendingShipping = deliveryStatus === "pending";
-    const isTotalSettled = order.is_total_settled ?? !isPendingShipping;
-    const shippingMinor = isPendingShipping ? null : order.shipping_minor;
+    const isTotalSettled = deliveryStatus === "arranged_separately" ? true : (order.is_total_settled ?? !isPendingShipping);
+    const shippingMinor = deliveryStatus === "arranged_separately" ? 0 : (isPendingShipping ? null : order.shipping_minor);
 
     return {
       id: order.id,
       orderNumber: order.order_number,
-      status: "pending",
+      status: (order.status as PreparedOrder["status"]) ?? "pending",
       fulfillmentStatus: order.fulfillment_status,
       currency: "NGN",
       deliveryStatus,

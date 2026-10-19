@@ -1,5 +1,6 @@
 import { requireApplicationAccess } from "@/features/auth/services/authorization";
 import { createServerSupabaseClient, createPrivilegedSupabaseClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/database";
 import {
   generateSku,
   generateSlug,
@@ -11,6 +12,7 @@ export interface AdminProductDetail {
   name: string;
   slug: string;
   category?: "unisex" | "men" | "women";
+  collection?: "premium" | "regular";
   subtitle: string | null;
   description: string;
   story: string | null;
@@ -323,11 +325,15 @@ export async function getAdminProductForEdit(id: string): Promise<AdminProductDe
     category = "men";
   }
 
+  const collection: "premium" | "regular" =
+    (product as Record<string, unknown>).collection === "premium" ? "premium" : "regular";
+
   return {
     id: product.id,
     name: product.name,
     slug: product.slug,
     category,
+    collection,
     subtitle: product.subtitle,
     description: product.description,
     story: product.story,
@@ -381,32 +387,44 @@ export async function createAdminProduct(input: ProductAdminFormValues): Promise
   }
 
   const concentration = input.concentration || "edp";
+  const collectionTier: "premium" | "regular" = input.collection || "regular";
 
-  // 1. Insert product record
-  const { data: product, error: productError } = await db
-    .from("products")
-    .insert({
-      brand_id: brandId,
-      family_id: familyId,
-      name: input.name.trim(),
-      slug: slug,
-      subtitle: subtitle,
-      description: input.description.trim(),
-      story: input.story?.trim() || null,
-      concentration: concentration,
-      perfumer: input.perfumer?.trim() || null,
-      launch_year: input.launch_year || null,
-      longevity_hours_min: input.longevity_hours_min ?? null,
-      longevity_hours_max: input.longevity_hours_max ?? null,
-      sillage: input.sillage || null,
-      status: input.status,
-      is_featured: input.is_featured,
-      seo_title: input.seo_title?.trim() || null,
-      seo_description: input.seo_description?.trim() || null,
-      published_at: publishedAt,
-    })
-    .select("id")
-    .single();
+  // 1. Insert product record (resilient to pending database migration)
+  const insertPayload: Database["public"]["Tables"]["products"]["Insert"] = {
+    brand_id: brandId,
+    family_id: familyId,
+    name: input.name.trim(),
+    slug: slug,
+    subtitle: subtitle,
+    description: input.description.trim(),
+    story: input.story?.trim() || null,
+    concentration: concentration,
+    perfumer: input.perfumer?.trim() || null,
+    launch_year: input.launch_year || null,
+    longevity_hours_min: input.longevity_hours_min ?? null,
+    longevity_hours_max: input.longevity_hours_max ?? null,
+    sillage: input.sillage || null,
+    status: input.status,
+    is_featured: input.is_featured,
+    seo_title: input.seo_title?.trim() || null,
+    seo_description: input.seo_description?.trim() || null,
+    published_at: publishedAt,
+    collection: collectionTier,
+  };
+
+  let productResult = await db.from("products").insert(insertPayload).select("id").single();
+  if (
+    productResult.error &&
+    (productResult.error.message?.includes("collection") ||
+      productResult.error.code === "PGRST204" ||
+      productResult.error.code === "42703")
+  ) {
+    delete insertPayload.collection;
+    productResult = await db.from("products").insert(insertPayload).select("id").single();
+  }
+
+  const product = productResult.data;
+  const productError = productResult.error;
 
   if (productError || !product?.id) {
     throw new Error(`Failed to create perfume record: ${productError?.message}`);
@@ -557,29 +575,42 @@ export async function updateAdminProduct(id: string, input: ProductAdminFormValu
   }
 
   // 1. Update product base fields with preservation of existing advanced fields
-  const { error: updateError } = await db
-    .from("products")
-    .update({
-      brand_id: brandId,
-      family_id: familyId,
-      name: input.name.trim(),
-      slug: input.slug?.trim() || existing.slug || generateSlug(input.name),
-      subtitle,
-      description: input.description.trim(),
-      story: input.story !== undefined ? (input.story?.trim() || null) : existing.story,
-      concentration: input.concentration || existing.concentration || "edp",
-      perfumer: input.perfumer !== undefined ? (input.perfumer?.trim() || null) : existing.perfumer,
-      launch_year: input.launch_year !== undefined ? input.launch_year : existing.launch_year,
-      longevity_hours_min: input.longevity_hours_min !== undefined ? input.longevity_hours_min : existing.longevity_hours_min,
-      longevity_hours_max: input.longevity_hours_max !== undefined ? input.longevity_hours_max : existing.longevity_hours_max,
-      sillage: input.sillage !== undefined ? input.sillage : existing.sillage,
-      status: input.status,
-      is_featured: input.is_featured ?? existing.is_featured,
-      seo_title: input.seo_title !== undefined ? (input.seo_title?.trim() || null) : existing.seo_title,
-      seo_description: input.seo_description !== undefined ? (input.seo_description?.trim() || null) : existing.seo_description,
-      published_at: publishedAt,
-    })
-    .eq("id", id);
+  const updatePayload: Database["public"]["Tables"]["products"]["Update"] = {
+    brand_id: brandId,
+    family_id: familyId,
+    name: input.name.trim(),
+    slug: input.slug?.trim() || existing.slug || generateSlug(input.name),
+    subtitle,
+    description: input.description.trim(),
+    story: input.story !== undefined ? (input.story?.trim() || null) : existing.story,
+    concentration: input.concentration || existing.concentration || "edp",
+    perfumer: input.perfumer !== undefined ? (input.perfumer?.trim() || null) : existing.perfumer,
+    launch_year: input.launch_year !== undefined ? input.launch_year : existing.launch_year,
+    longevity_hours_min: input.longevity_hours_min !== undefined ? input.longevity_hours_min : existing.longevity_hours_min,
+    longevity_hours_max: input.longevity_hours_max !== undefined ? input.longevity_hours_max : existing.longevity_hours_max,
+    sillage: input.sillage !== undefined ? input.sillage : existing.sillage,
+    status: input.status,
+    is_featured: input.is_featured ?? existing.is_featured,
+    seo_title: input.seo_title !== undefined ? (input.seo_title?.trim() || null) : existing.seo_title,
+    seo_description: input.seo_description !== undefined ? (input.seo_description?.trim() || null) : existing.seo_description,
+    published_at: publishedAt,
+    collection:
+      input.collection ||
+      ((existing as Record<string, unknown>).collection as "premium" | "regular") ||
+      "regular",
+  };
+
+  let { error: updateError } = await db.from("products").update(updatePayload).eq("id", id);
+  if (
+    updateError &&
+    (updateError.message?.includes("collection") ||
+      updateError.code === "PGRST204" ||
+      updateError.code === "42703")
+  ) {
+    delete updatePayload.collection;
+    const retryRes = await db.from("products").update(updatePayload).eq("id", id);
+    updateError = retryRes.error;
+  }
 
   if (updateError) {
     throw new Error(`Failed to update product details: ${updateError.message}`);
@@ -677,65 +708,94 @@ export async function updateAdminProduct(id: string, input: ProductAdminFormValu
       variantId = created.id;
     }
 
-    // Ensure inventory level exists
-    const { data: existingLevel } = await db
-      .from("inventory_levels")
-      .select("id, on_hand, reserved")
-      .eq("variant_id", variantId)
-      .eq("location_id", locationId)
-      .maybeSingle();
+    // Ensure inventory level exists atomically and safely
+    const targetStock = variant.initial_stock !== undefined ? Number(variant.initial_stock) : undefined;
 
-    let levelId = existingLevel?.id;
-    const currentOnHand = existingLevel?.on_hand ?? 0;
-    const targetStock = variant.initial_stock !== undefined ? Number(variant.initial_stock) : currentOnHand;
+    // 1. Prefer atomic database RPC if deployed
+    let rpcHandled = false;
+    if (targetStock !== undefined) {
+      const { error: rpcError } = await db.rpc("set_variant_inventory_stock", {
+        p_variant_id: variantId,
+        p_location_id: locationId,
+        p_target_on_hand: targetStock,
+        p_reason: "correction",
+        p_note: `Product edit stock adjustment for ${sku} (${admin.email})`,
+      });
 
-    if (!levelId) {
-      const { data: createdLevel, error: createLevelErr } = await db
+      if (!rpcError) {
+        rpcHandled = true;
+      }
+    }
+
+    if (!rpcHandled) {
+      // 2. Resilient application-level fallback with strict invariant checks
+      const { data: existingLevel } = await db
         .from("inventory_levels")
-        .insert({
-          variant_id: variantId,
-          location_id: locationId,
-          on_hand: targetStock,
-          reserved: 0,
-        })
-        .select("id")
-        .single();
+        .select("id, on_hand, reserved")
+        .eq("variant_id", variantId)
+        .eq("location_id", locationId)
+        .maybeSingle();
 
-      if (createLevelErr || !createdLevel?.id) {
-        throw new Error(`Failed to initialize inventory level for variant: ${createLevelErr?.message}`);
-      }
-      levelId = createdLevel.id;
+      let levelId = existingLevel?.id;
+      const currentOnHand = existingLevel?.on_hand ?? 0;
+      const currentReserved = existingLevel?.reserved ?? 0;
+      const resolvedTarget = targetStock !== undefined ? targetStock : currentOnHand;
 
-      if (targetStock > 0) {
-        await db.from("inventory_movements").insert({
-          inventory_level_id: levelId,
-          reason: "receipt",
-          quantity_delta: targetStock,
-          reference_type: "initial_setup",
-          reference_id: variantId,
-          note: `Initial stock intake for ${sku} (${admin.email})`,
-        });
-      }
-    } else if (variant.initial_stock !== undefined && variant.initial_stock !== currentOnHand) {
-      const delta = variant.initial_stock - currentOnHand;
-      if (delta !== 0) {
-        const reason = delta > 0 ? "receipt" : "correction";
-        await db
+      if (!levelId) {
+        const { data: createdLevel, error: createLevelErr } = await db
           .from("inventory_levels")
-          .update({
-            on_hand: variant.initial_stock,
-            updated_at: new Date().toISOString(),
+          .insert({
+            variant_id: variantId,
+            location_id: locationId,
+            on_hand: resolvedTarget,
+            reserved: 0,
           })
-          .eq("id", levelId);
+          .select("id")
+          .single();
 
-        await db.from("inventory_movements").insert({
-          inventory_level_id: levelId,
-          reason,
-          quantity_delta: delta,
-          reference_type: "manual_adjustment",
-          reference_id: variantId,
-          note: `Admin inventory update for ${sku} (${admin.email})`,
-        });
+        if (createLevelErr || !createdLevel?.id) {
+          throw new Error(`Failed to initialize inventory level for variant: ${createLevelErr?.message}`);
+        }
+        levelId = createdLevel.id;
+
+        if (resolvedTarget > 0) {
+          await db.from("inventory_movements").insert({
+            inventory_level_id: levelId,
+            reason: "receipt",
+            quantity_delta: resolvedTarget,
+            reference_type: "initial_setup",
+            reference_id: variantId,
+            note: `Initial stock intake for ${sku} (${admin.email})`,
+          });
+        }
+      } else if (targetStock !== undefined && targetStock !== currentOnHand) {
+        // Enforce inventory invariant: cannot reduce below active reservations
+        if (targetStock < currentReserved) {
+          throw new Error(
+            `Cannot reduce stock of ${sku} to ${targetStock}. It has ${currentReserved} units actively reserved in checkout.`
+          );
+        }
+
+        const delta = targetStock - currentOnHand;
+        if (delta !== 0) {
+          const reason = delta > 0 ? "receipt" : "correction";
+          await db
+            .from("inventory_levels")
+            .update({
+              on_hand: targetStock,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", levelId);
+
+          await db.from("inventory_movements").insert({
+            inventory_level_id: levelId,
+            reason,
+            quantity_delta: delta,
+            reference_type: "manual_adjustment",
+            reference_id: variantId,
+            note: `Admin inventory update for ${sku} (${admin.email})`,
+          });
+        }
       }
     }
   }

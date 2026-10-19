@@ -11,14 +11,34 @@ import { getCommerceOperations } from "@/features/admin/services/commerce-operat
 import { paystackGateway } from "@/features/payments/services/paystack-gateway";
 import { ShieldCheck, AlertCircle } from "lucide-react";
 
+import { AdminPagination } from "@/features/admin/components/admin-pagination";
+
 export const metadata = {
   title: "Payment Operations & Ledger | Solure Scents Admin",
 };
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: PageProps<"/admin/payments">) {
+  const params = await searchParams;
+  const rawPage = typeof params.page === "string" ? params.page : undefined;
+  const page =
+    rawPage && !Number.isNaN(Number(rawPage)) && Number(rawPage) > 0
+      ? Math.floor(Number(rawPage))
+      : 1;
+
+  const pageSize = 10;
   const d = await getCommerceOperations();
   const orderMap = new Map(d.orders.map((o) => [o.id, o]));
   const isPaystackConfigured = paystackGateway.isConfigured();
+
+  const totalCount = d.payments.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const validPage = Math.max(1, Math.min(page, totalPages || 1));
+  const pagedPayments = d.payments.slice(
+    (validPage - 1) * pageSize,
+    validPage * pageSize,
+  );
 
   return (
     <div className="space-y-6">
@@ -103,7 +123,7 @@ export default async function Page() {
       <Panel title={`Payment Ledger (${d.payments.length} Transactions)`}>
         {d.payments.length ? (
           <div className="divide-y divide-charcoal/10">
-            {d.payments.map((p) => {
+            {pagedPayments.map((p) => {
               const o = orderMap.get(p.order_id);
               const isCaptured = p.status === "captured";
               const isPending = p.status === "pending";
@@ -158,6 +178,14 @@ export default async function Page() {
                 </div>
               );
             })}
+            <AdminPagination
+              currentPage={validPage}
+              pageSize={pageSize}
+              totalCount={totalCount}
+              baseUrl="/admin/payments"
+              searchParams={{}}
+              itemLabel="transactions"
+            />
           </div>
         ) : (
           <Empty>No payment records have been registered in the ledger.</Empty>

@@ -48,8 +48,6 @@ export function CartDrawer() {
 
   const items = cart?.items ?? [];
   const itemCount = cart?.itemCount ?? 0;
-  const subtotalMinor = cart?.subtotalMinor ?? 0;
-  const currency = cart?.currency ?? "NGN";
 
   return (
     <AnimatePresence>
@@ -249,58 +247,15 @@ export function CartDrawer() {
 
               {/* Footer */}
               {items.length > 0 && (
-                <div className="border-t border-border/80 bg-pearl/90 p-6 sm:px-8">
-                  <div className="mb-4 rounded-sm border border-border/80 bg-sand/30 px-3 py-2 text-center text-[0.62rem] tracking-[0.14em] text-muted uppercase">
-                    Delivery options and fees are calculated at checkout.
-                  </div>
-
-                  <div className="space-y-2 border-b border-border/60 pb-4 text-xs">
-                    <div className="flex justify-between text-muted">
-                      <span>Subtotal</span>
-                      <span className="font-medium text-charcoal">
-                        {formatMoney(subtotalMinor, currency)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-muted">
-                      <span>Delivery</span>
-                      <span>Calculated at checkout</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between text-base">
-                    <span className="font-display text-charcoal">Estimated Total</span>
-                    <strong className="font-display text-xl text-charcoal">
-                      {formatMoney(subtotalMinor, currency)}
-                    </strong>
-                  </div>
-
-                  <div className="mt-6 space-y-2">
-                    <Link
-                      href="/checkout"
-                      onClick={closeCart}
-                      className="flex w-full items-center justify-center gap-2 border border-charcoal bg-charcoal py-3.5 text-xs font-semibold tracking-[0.16em] text-pearl uppercase transition-all hover:border-gold hover:bg-gold"
-                    >
-                      <span>Proceed to Checkout</span>
-                      <ArrowRight size={14} />
-                    </Link>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <Link
-                        href="/cart"
-                        onClick={closeCart}
-                        className="flex items-center justify-center border border-charcoal/20 py-2.5 text-[0.65rem] font-medium tracking-[0.14em] text-charcoal uppercase transition-colors hover:border-charcoal hover:bg-charcoal/5"
-                      >
-                        View Full Bag
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={closeCart}
-                        className="flex items-center justify-center border border-charcoal/20 py-2.5 text-[0.65rem] font-medium tracking-[0.14em] text-charcoal uppercase transition-colors hover:border-charcoal hover:bg-charcoal/5"
-                      >
-                        Continue Browsing
-                      </button>
-                    </div>
-                  </div>
+                <div className="border-t border-border/80 bg-pearl/95 p-5 sm:p-6 shadow-[0_-8px_20px_rgba(29,27,25,0.04)]">
+                  <Link
+                    href="/checkout"
+                    onClick={closeCart}
+                    className="flex w-full items-center justify-center gap-2 border border-charcoal bg-charcoal py-4 text-xs font-semibold tracking-[0.18em] text-pearl uppercase transition-all hover:border-gold hover:bg-gold hover:text-charcoal shadow-sm active:scale-[0.99]"
+                  >
+                    <span>Proceed to Checkout</span>
+                    <ArrowRight size={14} />
+                  </Link>
                 </div>
               )}
             </motion.aside>

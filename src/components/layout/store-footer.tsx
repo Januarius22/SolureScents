@@ -24,7 +24,6 @@ export function StoreFooter() {
           <p className="text-xs tracking-[.15em] text-champagne uppercase">Concierge</p>
           <nav className="mt-5 space-y-3 text-sm text-ivory/70">
             <Link className="block transition-colors hover:text-white" href="/contact">Contact Us</Link>
-            <Link className="block transition-colors hover:text-white" href="/track-order">Track an Order</Link>
             <Link className="block transition-colors hover:text-white" href="/about">Our Story</Link>
           </nav>
         </div>

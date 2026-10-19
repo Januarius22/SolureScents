@@ -4,15 +4,35 @@ import type { Metadata } from "next";
 import { Money } from "@/components/account/account-ui";
 import { getAdminCustomers } from "@/features/admin/services/commerce-operations";
 
+import { AdminPagination } from "@/features/admin/components/admin-pagination";
+
 export const metadata: Metadata = {
   title: "Customer & Guest Directory | Solure Scents Admin",
 };
 
-export default async function AdminCustomersPage() {
+export default async function AdminCustomersPage({
+  searchParams,
+}: PageProps<"/admin/customers">) {
+  const params = await searchParams;
+  const rawPage = typeof params.page === "string" ? params.page : undefined;
+  const page =
+    rawPage && !Number.isNaN(Number(rawPage)) && Number(rawPage) > 0
+      ? Math.floor(Number(rawPage))
+      : 1;
+
+  const pageSize = 10;
   const customers = await getAdminCustomers();
 
   const totalRevenue = customers.reduce((sum, c) => sum + c.totalSpentMinor, 0);
   const primaryCurrency = customers[0]?.currency ?? "NGN";
+
+  const totalCount = customers.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const validPage = Math.max(1, Math.min(page, totalPages || 1));
+  const pagedCustomers = customers.slice(
+    (validPage - 1) * pageSize,
+    validPage * pageSize,
+  );
 
   return (
     <div className="space-y-8">
@@ -78,7 +98,7 @@ export default async function AdminCustomersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-charcoal/5">
-                {customers.map((c) => (
+                {pagedCustomers.map((c) => (
                   <tr key={c.email} className="hover:bg-ivory/50 transition-colors">
                     <td className="py-4 pr-4 font-medium text-charcoal">
                       <div className="flex items-center gap-2">
@@ -123,6 +143,14 @@ export default async function AdminCustomersPage() {
                 ))}
               </tbody>
             </table>
+            <AdminPagination
+              currentPage={validPage}
+              pageSize={pageSize}
+              totalCount={totalCount}
+              baseUrl="/admin/customers"
+              searchParams={{}}
+              itemLabel="customer contacts"
+            />
           </div>
         ) : (
           <div className="py-16 text-center text-muted">

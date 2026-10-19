@@ -23,6 +23,9 @@ export interface ProductSummary {
   name: string;
   slug: string;
   subtitle: string | null;
+  collection?: "premium" | "regular" | null;
+  category?: "unisex" | "men" | "women" | null;
+  brandName?: string;
   primaryImageUrl?: string | null;
   variants: ProductVariantSummary[];
 }

@@ -28,14 +28,14 @@ export interface CheckoutFormData {
   orderNotes?: string;
 }
 
-export type DeliveryPricingStatus = "configured" | "pending" | "free";
+export type DeliveryPricingStatus = "configured" | "pending" | "free" | "arranged_separately";
 
 export interface DeliveryQuote {
   state: string;
   zone: string;
   estimatedDays: string;
   status: DeliveryPricingStatus;
-  feeMinor: number | null; // null represents pending courier calculation
+  feeMinor: number | null; // null represents delivery fee arranged/quoted separately
   currency: "NGN";
   isConfigured: boolean;
   notice: string;
@@ -57,7 +57,7 @@ export interface PreparedOrderItem {
 export interface PreparedOrder {
   id: string;
   orderNumber: string;
-  status: "pending";
+  status: Database["public"]["Enums"]["order_status"];
   fulfillmentStatus: Database["public"]["Enums"]["fulfillment_status"];
   currency: "NGN";
   deliveryStatus: DeliveryPricingStatus;

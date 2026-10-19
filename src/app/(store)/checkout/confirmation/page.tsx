@@ -12,6 +12,7 @@ import {
 import { getVerifiedGuestOrder } from "@/features/checkout/services/guest-order-access";
 import { buttonStyles } from "@/components/ui/button";
 import { PaySecurelyButton } from "@/features/payments/components/pay-securely-button";
+import { PostPaymentSuccessCard } from "@/features/checkout/components/post-payment-success-card";
 
 export const metadata: Metadata = {
   title: "Order Preparation Confirmation | Solure Scents",
@@ -56,50 +57,58 @@ export default async function OrderConfirmationPage({
   return (
     <div className="min-h-screen bg-ivory/40 pb-24 pt-12 sm:pt-16">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-        {/* Status Notification */}
-        <div className="border border-charcoal/15 bg-white p-8 text-center shadow-soft sm:p-12">
-          <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${
-            isPaid ? "bg-emerald-50 text-emerald-600" : "bg-gold/15 text-gold"
-          }`}>
-            <CheckCircle2 size={32} />
-          </div>
+        {/* Status Notification / Post-Payment WhatsApp Experience */}
+        {isPaid ? (
+          <PostPaymentSuccessCard
+            orderNumber={order.orderNumber}
+            amountMinor={order.totalMinor}
+            currency={order.currency}
+            orderId={order.id}
+          />
+        ) : (
+          <div className="border border-charcoal/15 bg-white p-8 text-center shadow-soft sm:p-12">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gold/15 text-gold">
+              <CheckCircle2 size={32} />
+            </div>
 
-          <p className="mt-6 text-xs font-semibold tracking-[0.25em] text-gold uppercase">
-            {isPaid ? "Payment Verified & Order Confirmed" : "Order Prepared & Pending Payment"}
-          </p>
-          <h1 className="mt-2 font-display text-4xl text-charcoal sm:text-5xl">
-            {isPaid ? "Your Scent Journey Has Begun" : "Fragrance Order Secured"}
-          </h1>
-          <p className="mx-auto mt-3 max-w-lg text-sm text-muted">
-            {isPaid
-              ? "Your payment has been verified with Paystack. Our artisan atelier is preparing your flacons."
-              : "Complete payment to finalize your fragrance order and reserve your flacons."}
-          </p>
+            <p className="mt-6 text-xs font-semibold tracking-[0.25em] text-gold uppercase">
+              Order Prepared & Pending Payment
+            </p>
+            <h1 className="mt-2 font-display text-4xl text-charcoal sm:text-5xl">
+              Fragrance Order Secured
+            </h1>
+            <p className="mx-auto mt-3 max-w-lg text-sm text-muted">
+              Complete payment to finalize your fragrance order and reserve your flacons.
+            </p>
 
-          <div className="mt-6 inline-flex items-center gap-3 border border-charcoal/15 bg-ivory/60 px-5 py-2.5">
-            <span className="text-xs text-muted uppercase">Reference:</span>
-            <span className="font-mono text-base font-bold tracking-wider text-charcoal">
-              {order.orderNumber}
-            </span>
-          </div>
+            <div className="mt-6 inline-flex items-center gap-3 border border-charcoal/15 bg-ivory/60 px-5 py-2.5">
+              <span className="text-xs text-muted uppercase">Reference:</span>
+              <span className="font-mono text-base font-bold tracking-wider text-charcoal">
+                {order.orderNumber}
+              </span>
+            </div>
 
-          {/* Paystack Test Payment Section */}
-          <div className="mx-auto mt-8 max-w-md text-left">
-            {!isPaid ? (
+            {/* Delivery Policy Disclosure */}
+            <div className="mx-auto mt-6 max-w-md rounded-none border border-gold/40 bg-champagne/15 p-4 text-xs text-charcoal/90 text-left">
+              <p className="font-semibold text-charcoal">
+                Solure Scents Atelier Delivery Policy:
+              </p>
+              <p className="mt-1 leading-relaxed text-muted">
+                Your payment covers your perfume purchase only. Delivery fees, where applicable, will be confirmed separately by our team after your order is placed.
+              </p>
+            </div>
+
+            {/* Paystack Test Payment Section */}
+            <div className="mx-auto mt-6 max-w-md text-left">
               <PaySecurelyButton
                 orderId={order.id}
                 orderNumber={order.orderNumber}
                 amountMinor={order.totalMinor}
                 currency={order.currency}
               />
-            ) : (
-              <div className="flex items-center justify-center gap-2 border border-emerald-200 bg-emerald-50 p-4 text-xs font-medium text-emerald-900">
-                <CheckCircle2 size={16} className="text-emerald-600" />
-                <span>Payment captured successfully. Receipt sent to {order.customerEmail}.</span>
-              </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Order Details Grid */}
         <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2">
@@ -179,30 +188,25 @@ export default async function OrderConfirmationPage({
                 <span>Bag Subtotal</span>
                 <span className="font-mono text-charcoal">{formatMoney(order.subtotalMinor)}</span>
               </div>
-              <div className="flex justify-between text-muted">
+              <div className="flex justify-between items-center text-muted">
                 <span>Delivery Service</span>
-                <span className="font-mono text-charcoal">
-                  {order.deliveryStatus === "free" ? (
-                    <span className="text-emerald-700">₦0 (Complimentary)</span>
-                  ) : order.deliveryStatus === "configured" && order.shippingMinor !== null ? (
-                    formatMoney(order.shippingMinor)
-                  ) : (
-                    <span className="font-sans text-[11px] text-amber-800">
-                      Calculated prior to dispatch
-                    </span>
-                  )}
+                <span className="text-right">
+                  <span className="font-sans text-xs font-semibold text-charcoal block">
+                    Arranged Separately
+                  </span>
+                  <span className="text-[10px] text-muted block">
+                    Confirmed via WhatsApp
+                  </span>
                 </span>
               </div>
               <div className="flex items-baseline justify-between border-t border-charcoal/15 pt-3 text-sm">
                 <div>
                   <span className="font-semibold text-charcoal">
-                    {order.isTotalSettled ? "Settled Total" : "Product Subtotal"}
+                    Perfume Total
                   </span>
-                  {!order.isTotalSettled && (
-                    <p className="text-[10px] text-muted">
-                      Excludes courier dispatch fee (quoted separately prior to shipment)
-                    </p>
-                  )}
+                  <p className="text-[10px] text-muted">
+                    Excludes delivery fees (confirmed separately via WhatsApp)
+                  </p>
                 </div>
                 <span className="font-display text-lg font-bold text-charcoal">
                   {formatMoney(order.totalMinor)}
@@ -215,11 +219,13 @@ export default async function OrderConfirmationPage({
         {/* Action Controls */}
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
           <Link href="/shop" className={buttonStyles("primary")}>
-            Explore More Fragrances
+            {isPaid ? "Continue Shopping" : "Explore More Fragrances"}
           </Link>
-          <Link href="/cart" className={buttonStyles("secondary")}>
-            Return to Cart
-          </Link>
+          {!isPaid && (
+            <Link href="/cart" className={buttonStyles("secondary")}>
+              Return to Cart
+            </Link>
+          )}
         </div>
       </div>
     </div>

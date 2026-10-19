@@ -1,7 +1,7 @@
 import { randomBytes, createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { createServerSupabaseClient, createPrivilegedSupabaseClient } from "@/lib/supabase/server";
-import type { Json } from "@/types/database";
+import type { Json, Database } from "@/types/database";
 import { getActiveCart } from "@/features/cart/services/cart-service";
 import { readGuestSession } from "@/features/cart/services/guest-session";
 import { guestCheckoutSchema, normalizeNigerianPhone, type GuestCheckoutInput } from "../validation/checkout-schema";
@@ -22,7 +22,9 @@ function isMigrationPendingError(error: unknown): boolean {
     e.code === "PGRST202" ||
     e.code === "42883" ||
     e.code === "23502" || // Not-null constraint violation on legacy profile_id
+    e.code === "23514" || // Check constraint violation if 'arranged_separately' is not yet in enum
     Boolean(e.message?.includes("profile_id")) ||
+    Boolean(e.message?.includes("orders_delivery_status_check")) ||
     Boolean(e.message?.includes("prepare_guest_order_record")) ||
     Boolean(e.message?.includes("Could not find the function")) ||
     Boolean(e.message?.includes("column \"guest_session_hash\" does not exist"))
@@ -178,13 +180,13 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
     });
   }
 
-  // 4. Calculate Delivery Quote & Settlement Status
+  // 4. Calculate Delivery Quote & Settlement Status (Abuja Atelier Nationwide Policy)
   const deliveryQuote = await getDeliveryQuote(formData.state, calculatedSubtotalMinor);
-  const isPending = deliveryQuote.status === "pending";
-  const isFree = deliveryQuote.status === "free";
-  const shippingMinor = isPending ? null : (isFree ? 0 : (deliveryQuote.feeMinor ?? 0));
-  const isTotalSettled = !isPending;
-  const totalMinor = calculatedSubtotalMinor + (shippingMinor ?? 0);
+  // Online transaction shipping charge is 0; delivery is confirmed & charged separately via WhatsApp.
+  const shippingMinor = 0;
+  // Online payable total is the server-verified perfume total (settled for Paystack payment)
+  const isTotalSettled = true;
+  const totalMinor = calculatedSubtotalMinor;
 
   // 5. Generate Capability Access Token & Hashes
   const guestAccessToken = randomBytes(32).toString("hex");
@@ -239,19 +241,40 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
 
   try {
     // Attempt RPC preparation function first
-    const { data: rpcOrder, error: rpcError } = await dbClient.rpc("prepare_guest_order_record", {
+    let rpcDeliveryStatus: string = deliveryQuote.status;
+    let { data: rpcOrder, error: rpcError } = await dbClient.rpc("prepare_guest_order_record", {
       p_guest_session_hash: session.tokenHash,
       p_guest_access_token_hash: guestAccessTokenHash,
       p_customer_email: formData.email,
       p_shipping_address: preparedOrder.shippingAddress as unknown as Json,
       p_billing_address: preparedOrder.billingAddress as unknown as Json,
       p_customer_note: preparedOrder.customerNote,
-      p_shipping_minor: shippingMinor ?? 0,
+      p_shipping_minor: 0,
       p_currency: "NGN",
       p_items: orderItems.map((i) => ({ variant_id: i.variantId, quantity: i.quantity })),
-      p_delivery_status: deliveryQuote.status,
+      p_delivery_status: rpcDeliveryStatus,
       p_is_total_settled: isTotalSettled,
     });
+
+    // Check if delivery status constraint failed because migration adding 'arranged_separately' is pending
+    if (rpcError && (rpcError.code === "23514" || rpcError.message?.includes("orders_delivery_status_check"))) {
+      rpcDeliveryStatus = "pending";
+      const retryResult = await dbClient.rpc("prepare_guest_order_record", {
+        p_guest_session_hash: session.tokenHash,
+        p_guest_access_token_hash: guestAccessTokenHash,
+        p_customer_email: formData.email,
+        p_shipping_address: preparedOrder.shippingAddress as unknown as Json,
+        p_billing_address: preparedOrder.billingAddress as unknown as Json,
+        p_customer_note: preparedOrder.customerNote,
+        p_shipping_minor: 0,
+        p_currency: "NGN",
+        p_items: orderItems.map((i) => ({ variant_id: i.variantId, quantity: i.quantity })),
+        p_delivery_status: "pending",
+        p_is_total_settled: isTotalSettled,
+      });
+      rpcOrder = retryResult.data;
+      rpcError = retryResult.error;
+    }
 
     if (!rpcError && rpcOrder) {
       preparedOrder.id = rpcOrder.id;
@@ -259,7 +282,8 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
       persistedInDatabase = true;
     } else if (isMigrationPendingError(rpcError)) {
       // Attempt direct insert with service role if RPC is not yet registered
-      const { data: insertedOrder, error: insertError } = await dbClient
+      const insertDeliveryStatus = deliveryQuote.status;
+      let { data: insertedOrder, error: insertError } = await dbClient
         .from("orders")
         .insert({
           id: orderId,
@@ -271,10 +295,10 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
           fulfillment_status: "unfulfilled",
           currency: "NGN",
           subtotal_minor: calculatedSubtotalMinor,
-          shipping_minor: shippingMinor ?? 0,
+          shipping_minor: 0,
           discount_minor: 0,
           tax_minor: 0,
-          delivery_status: deliveryQuote.status,
+          delivery_status: insertDeliveryStatus as Database["public"]["Tables"]["orders"]["Insert"]["delivery_status"],
           is_total_settled: isTotalSettled,
           shipping_address: preparedOrder.shippingAddress as unknown as Json,
           billing_address: preparedOrder.billingAddress as unknown as Json,
@@ -284,6 +308,36 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
         })
         .select()
         .single();
+
+      if (insertError && (insertError.code === "23514" || insertError.message?.includes("orders_delivery_status_check"))) {
+        const retryInsert = await dbClient
+          .from("orders")
+          .insert({
+            id: orderId,
+            order_number: orderNumber,
+            profile_id: null,
+            guest_session_hash: session.tokenHash,
+            guest_access_token_hash: guestAccessTokenHash,
+            status: "pending",
+            fulfillment_status: "unfulfilled",
+            currency: "NGN",
+            subtotal_minor: calculatedSubtotalMinor,
+            shipping_minor: 0,
+            discount_minor: 0,
+            tax_minor: 0,
+            delivery_status: "pending",
+            is_total_settled: isTotalSettled,
+            shipping_address: preparedOrder.shippingAddress as unknown as Json,
+            billing_address: preparedOrder.billingAddress as unknown as Json,
+            customer_email: formData.email,
+            customer_note: preparedOrder.customerNote,
+            expires_at: expiresAt,
+          })
+          .select()
+          .single();
+        insertedOrder = retryInsert.data;
+        insertError = retryInsert.error;
+      }
 
       if (!insertError && insertedOrder) {
         persistedInDatabase = true;

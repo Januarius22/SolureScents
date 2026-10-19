@@ -197,7 +197,7 @@ export function DashboardShell({ appName, children, navigation, userEmail }: Das
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-5 sm:p-8 lg:p-10">{children}</main>
+        <main className="flex-1 min-w-0 w-full max-w-full p-4 sm:p-8 lg:p-10 overflow-x-hidden">{children}</main>
       </div>
 
       {/* Mobile Sidebar Drawer */}

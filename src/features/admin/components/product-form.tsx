@@ -76,6 +76,9 @@ export function ProductForm({ initialData, facets, mode }: ProductFormProps) {
   const [category, setCategory] = useState<"unisex" | "men" | "women">(
     initialData?.category ?? "unisex",
   );
+  const [collection, setCollection] = useState<"premium" | "regular">(
+    initialData?.collection ?? "regular",
+  );
   const [brandName, setBrandName] = useState(initialData?.brand?.name ?? "Solure Scents");
   const [customBrandMode, setCustomBrandMode] = useState(
     Boolean(
@@ -408,6 +411,7 @@ export function ProductForm({ initialData, facets, mode }: ProductFormProps) {
       brand_name: brandName.trim() || "Solure Scents",
       brand_id: matchedBrand?.id ?? initialData?.brand?.id ?? null,
       category,
+      collection,
       description: description.trim(),
       status: finalStatus,
       variants: mappedVariants,
@@ -686,6 +690,60 @@ export function ProductForm({ initialData, facets, mode }: ProductFormProps) {
                   Appears as filter and subtitle on customer search.
                 </p>
               </div>
+            </div>
+
+            {/* Perfume Collection Selector (Sprint 3.3) */}
+            <div className="border border-charcoal/10 bg-ivory/30 p-4 sm:p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                <label className="block text-xs font-semibold tracking-wider text-charcoal uppercase">
+                  Perfume Collection *
+                </label>
+                <span className="text-[11px] text-muted font-medium">Storefront classification tier</span>
+              </div>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCollection("premium")}
+                  className={`flex min-h-12 items-center justify-between border px-4 py-3 text-xs font-semibold uppercase tracking-wider transition ${
+                    collection === "premium"
+                      ? "border-gold bg-charcoal text-pearl shadow-sm ring-1 ring-gold"
+                      : "border-charcoal/20 bg-white text-charcoal hover:border-gold hover:bg-gold/5"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Crown size={15} className={collection === "premium" ? "text-gold" : "text-muted"} />
+                    <span>Premium Collection</span>
+                  </div>
+                  <span className={`rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
+                    collection === "premium" ? "bg-gold text-charcoal" : "bg-gold/20 text-gold"
+                  }`}>
+                    Gold Insignia
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCollection("regular")}
+                  className={`flex min-h-12 items-center justify-between border px-4 py-3 text-xs font-semibold uppercase tracking-wider transition ${
+                    collection === "regular"
+                      ? "border-charcoal bg-charcoal text-pearl shadow-sm ring-1 ring-charcoal"
+                      : "border-charcoal/20 bg-white text-charcoal hover:border-charcoal hover:bg-charcoal/5"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={15} className={collection === "regular" ? "text-pearl" : "text-muted"} />
+                    <span>Regular Collection</span>
+                  </div>
+                  <span className={`rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
+                    collection === "regular" ? "bg-charcoal/40 text-pearl" : "bg-charcoal/10 text-charcoal"
+                  }`}>
+                    Neutral Insignia
+                  </span>
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-muted">
+                Premium fragrances receive the refined gold badge; Regular fragrances display the minimal neutral insignia on product cards and in the boutique.
+              </p>
             </div>
 
             {/* Description */}

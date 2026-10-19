@@ -4,6 +4,7 @@ import {
   finalizeSuccessfulPayment,
   finalizeFailedPayment,
 } from "@/features/payments/services/payment-fulfillment";
+import { clearPurchasedCartItems } from "@/features/cart/services/cart-service";
 import { createPrivilegedSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
@@ -87,6 +88,14 @@ export async function POST(req: NextRequest) {
         return new NextResponse("Database fulfillment pending migration - reconciliation required", {
           status: 500,
         });
+      }
+
+      if (result.success && result.orderId) {
+        try {
+          await clearPurchasedCartItems(result.orderId);
+        } catch {
+          // Best effort in webhook environment
+        }
       }
 
       return NextResponse.json({

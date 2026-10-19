@@ -16,10 +16,48 @@ export const getCollections = cache(async () => {
   return data;
 });
 
+interface ProductRow {
+  id: string;
+  brand_id: string;
+  family_id: string | null;
+  name: string;
+  slug: string;
+  subtitle: string | null;
+  description: string;
+  story: string | null;
+  concentration: string;
+  perfumer: string | null;
+  launch_year: number | null;
+  longevity_hours_min: number | null;
+  longevity_hours_max: number | null;
+  sillage: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  collection?: string | null;
+}
+
 export const getProductBySlug = cache(async (slug: string) => {
   const supabase = await createServerSupabaseClient();
-  const { data: product, error } = await supabase.from("products").select("id, brand_id, family_id, name, slug, subtitle, description, story, concentration, perfumer, launch_year, longevity_hours_min, longevity_hours_max, sillage, seo_title, seo_description").eq("slug", slug).eq("status", "active").maybeSingle();
-  if (error) throw new Error("Unable to load this fragrance.", { cause: error });
+  let product: ProductRow | null = null;
+  const withCol = await supabase
+    .from("products")
+    .select("id, brand_id, family_id, name, slug, subtitle, description, story, concentration, perfumer, launch_year, longevity_hours_min, longevity_hours_max, sillage, seo_title, seo_description, collection")
+    .eq("slug", slug)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (withCol.error) {
+    const withoutCol = await supabase
+      .from("products")
+      .select("id, brand_id, family_id, name, slug, subtitle, description, story, concentration, perfumer, launch_year, longevity_hours_min, longevity_hours_max, sillage, seo_title, seo_description")
+      .eq("slug", slug)
+      .eq("status", "active")
+      .maybeSingle();
+    if (withoutCol.error) throw new Error("Unable to load this fragrance.", { cause: withoutCol.error });
+    product = (withoutCol.data as unknown as ProductRow) ?? null;
+  } else {
+    product = (withCol.data as unknown as ProductRow) ?? null;
+  }
   if (!product) return null;
 
   const [{ data: brand, error: brandError }, { data: variants, error: variantError }, { data: media }, { data: notesData }] = await Promise.all([

@@ -130,8 +130,12 @@ begin
     raise exception 'invalid shipping address structure' using errcode = '22023';
   end if;
 
-  -- Recompute subtotal strictly against live database prices
-  for v_item in select * from jsonb_to_recordset(p_items) as x(variant_id uuid, quantity integer) loop
+  -- Recompute subtotal strictly against live database prices (aggregating duplicate variants)
+  for v_item in 
+    select variant_id, sum(quantity)::integer as quantity 
+    from jsonb_to_recordset(p_items) as x(variant_id uuid, quantity integer)
+    group by variant_id
+  loop
     if v_item.quantity < 1 or v_item.quantity > 99 then
       raise exception 'item quantity must be between 1 and 99' using errcode = '22003';
     end if;
@@ -197,8 +201,12 @@ begin
   )
   returning * into v_order;
 
-  -- Insert order line items with server-verified prices
-  for v_item in select * from jsonb_to_recordset(p_items) as x(variant_id uuid, quantity integer) loop
+  -- Insert consolidated order line items with server-verified prices
+  for v_item in 
+    select variant_id, sum(quantity)::integer as quantity 
+    from jsonb_to_recordset(p_items) as x(variant_id uuid, quantity integer)
+    group by variant_id
+  loop
     select v.* into v_variant
     from public.product_variants v
     where v.id = v_item.variant_id;
@@ -248,9 +256,10 @@ declare
   v_count integer := 0;
 begin
   for v_item in 
-    select variant_id, quantity 
+    select variant_id, sum(quantity)::integer as quantity 
     from public.order_items 
     where order_id = p_order_id and variant_id is not null
+    group by variant_id
   loop
     -- Lock inventory level row to prevent race conditions during concurrent checkouts
     select * into v_level
@@ -277,12 +286,14 @@ begin
     insert into public.inventory_reservations (
       order_id,
       inventory_level_id,
+      variant_id,
       quantity,
       status,
       expires_at
     ) values (
       p_order_id,
       v_level.id,
+      v_item.variant_id,
       v_item.quantity,
       'active',
       now() + (p_ttl_minutes || ' minutes')::interval
@@ -366,16 +377,16 @@ end;
 $$;
 
 -- Restrict privileged procedures strictly to service_role
-revoke execute on function public.prepare_guest_order_record from public, anon;
-grant execute on function public.prepare_guest_order_record to service_role;
+revoke all on function public.prepare_guest_order_record(text, text, text, jsonb, jsonb, text, bigint, text, jsonb, text, boolean) from public, anon, authenticated;
+grant execute on function public.prepare_guest_order_record(text, text, text, jsonb, jsonb, text, bigint, text, jsonb, text, boolean) to service_role;
 
-revoke execute on function public.reserve_order_inventory from public, anon;
-grant execute on function public.reserve_order_inventory to service_role;
+revoke all on function public.reserve_order_inventory(uuid, integer) from public, anon, authenticated;
+grant execute on function public.reserve_order_inventory(uuid, integer) to service_role;
 
-revoke execute on function public.release_order_inventory from public, anon;
-grant execute on function public.release_order_inventory to service_role;
+revoke all on function public.release_order_inventory(uuid) from public, anon, authenticated;
+grant execute on function public.release_order_inventory(uuid) to service_role;
 
-revoke execute on function public.release_expired_inventory_reservations from public, anon;
-grant execute on function public.release_expired_inventory_reservations to service_role;
+revoke all on function public.release_expired_inventory_reservations() from public, anon, authenticated;
+grant execute on function public.release_expired_inventory_reservations() to service_role;
 
 commit;

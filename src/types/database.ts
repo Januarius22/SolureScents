@@ -86,6 +86,7 @@ export interface Database {
         status: Database["public"]["Enums"]["product_status"];
         story: string | null;
         subtitle: string | null;
+        collection?: "premium" | "regular" | null;
       }>;
       product_variants: TableDefinition<AuditColumns & {
         barcode: string | null;
@@ -192,7 +193,7 @@ export interface Database {
       orders: TableDefinition<AuditColumns & {
         billing_address: Json; cancelled_at: string | null; carrier: string | null; checkout_session_id: string | null;
         currency: string; customer_email: string; customer_note: string | null; delivered_at: string | null;
-        delivery_status?: "configured" | "pending" | "free";
+        delivery_status?: "configured" | "pending" | "free" | "arranged_separately";
         discount_minor: number; expires_at?: string | null; fulfillment_status: Database["public"]["Enums"]["fulfillment_status"];
         guest_access_token_hash?: string | null; guest_session_hash?: string | null;
         inventory_status?: "pending" | "fulfilled" | "reconciliation_required";
@@ -276,6 +277,17 @@ export interface Database {
       has_role: { Args: { requested_role: string }; Returns: boolean };
       adjust_inventory: {
         Args: { target_inventory_level_id: string; quantity_delta: number; movement_reason: Database["public"]["Enums"]["inventory_movement_reason"]; movement_note?: string | null; movement_reference_type?: string | null; movement_reference_id?: string | null };
+        Returns: Database["public"]["Tables"]["inventory_levels"]["Row"];
+      };
+      set_variant_inventory_stock: {
+        Args: {
+          p_variant_id: string;
+          p_location_id: string;
+          p_target_on_hand: number;
+          p_reason?: Database["public"]["Enums"]["inventory_movement_reason"];
+          p_note?: string | null;
+          p_actor_id?: string | null;
+        };
         Returns: Database["public"]["Tables"]["inventory_levels"]["Row"];
       };
       update_order_operations: {

@@ -153,10 +153,7 @@ export function CheckoutForm({ cart }: { cart: Cart }) {
     });
   };
 
-  const isPendingShipping = !deliveryQuote || deliveryQuote.status === "pending";
-  const isFreeShipping = deliveryQuote?.status === "free";
-  const shippingMinor = isPendingShipping ? null : (isFreeShipping ? 0 : (deliveryQuote.feeMinor ?? 0));
-  const grandTotalMinor = cart.subtotalMinor + (shippingMinor ?? 0);
+  const grandTotalMinor = cart.subtotalMinor;
 
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-12 lg:grid-cols-12">
@@ -374,23 +371,30 @@ export function CheckoutForm({ cart }: { cart: Cart }) {
               </div>
             </div>
 
-            {/* Delivery notice card */}
-            {state && (
-              <div className="rounded-none border border-gold/30 bg-champagne/10 p-4 text-xs text-charcoal/90">
-                <div className="flex items-start gap-2.5">
-                  <Truck size={16} className="mt-0.5 shrink-0 text-gold" />
-                  <div>
-                    <span className="font-semibold text-charcoal">
-                      Estimated Timeline: {deliveryQuote?.estimatedDays ?? "2 - 5 business days"}
+            {/* Delivery notice card with explicit Abuja delivery policy */}
+            <div className="rounded-none border border-gold/40 bg-champagne/15 p-4 text-xs text-charcoal/90">
+              <div className="flex items-start gap-3">
+                <Truck size={17} className="mt-0.5 shrink-0 text-gold" />
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-charcoal uppercase tracking-wider text-[11px]">
+                      Atelier Dispatch & Delivery Policy
                     </span>
-                    <p className="mt-1 text-charcoal/80">
-                      {deliveryQuote?.notice ??
-                        "Courier delivery options and fees are confirmed before dispatch."}
-                    </p>
+                    <span className="rounded bg-gold/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-gold">
+                      Abuja Atelier
+                    </span>
                   </div>
+                  <p className="font-medium leading-relaxed text-charcoal/90">
+                    Your payment covers your perfume purchase only. Delivery fees, where applicable, will be confirmed separately by our team after your order is placed.
+                  </p>
+                  <p className="text-[11px] text-muted">
+                    {state
+                      ? `Selected destination: ${state} (${deliveryQuote?.estimatedDays ?? "1 - 3 business days"}). Delivery arrangement is completed via WhatsApp.`
+                      : "We ship nationwide across all 36 Nigerian states & FCT."}
+                  </p>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </section>
 
@@ -475,16 +479,13 @@ export function CheckoutForm({ cart }: { cart: Cart }) {
                 Delivery Service
                 {isCalculatingDelivery && <Loader2 size={12} className="animate-spin text-gold" />}
               </span>
-              <span className="font-mono text-xs font-semibold text-charcoal">
-                {deliveryQuote?.status === "free" ? (
-                  <span className="text-emerald-700">₦0 (Complimentary)</span>
-                ) : deliveryQuote?.status === "configured" && deliveryQuote.feeMinor !== null ? (
-                  formatMoney(deliveryQuote.feeMinor)
-                ) : (
-                  <span className="font-sans text-[11px] font-normal text-amber-800">
-                    Calculated prior to dispatch
-                  </span>
-                )}
+              <span className="text-right">
+                <span className="font-sans text-xs font-semibold text-charcoal block">
+                  Arranged Separately
+                </span>
+                <span className="text-[10px] text-muted block">
+                  Confirmed via WhatsApp post-payment
+                </span>
               </span>
             </div>
 
@@ -492,14 +493,10 @@ export function CheckoutForm({ cart }: { cart: Cart }) {
               <div className="flex items-baseline justify-between">
                 <div>
                   <span className="font-display text-lg text-charcoal">
-                    {isPendingShipping ? "Product Subtotal" : "Order Total"}
+                    Perfume Total
                   </span>
                   <p className="text-[10px] text-muted">
-                    {deliveryQuote?.status === "free"
-                      ? "Includes verified complimentary delivery"
-                      : deliveryQuote?.status === "configured"
-                        ? "Includes verified courier delivery"
-                        : "Excludes courier dispatch fee (quoted prior to shipment)"}
+                    Excludes delivery fees (confirmed separately via WhatsApp)
                   </p>
                 </div>
                 <span className="font-display text-2xl font-bold text-charcoal">

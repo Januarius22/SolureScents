@@ -1,5 +1,6 @@
 import { requireApplicationAccess } from "@/features/auth/services/authorization";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { resolveProductCollection } from "@/features/catalog/services/catalog-service";
 
 export interface AdminProductWithVariants {
   id: string;
@@ -7,6 +8,7 @@ export interface AdminProductWithVariants {
   slug: string;
   subtitle: string | null;
   concentration: string;
+  collection?: "premium" | "regular" | null;
   status: string;
   created_at: string;
   brand_name?: string;
@@ -68,16 +70,45 @@ export async function getAdminProducts(): Promise<AdminProductWithVariants[]> {
   await requireApplicationAccess("admin");
   const db = await createServerSupabaseClient();
 
-  const [productsRes, variantsRes, levelsRes, brandsRes, mediaRes] = await Promise.all([
-    db.from("products").select("id, brand_id, name, slug, subtitle, concentration, status, created_at").order("name"),
+  const firstAttempt = await db
+    .from("products")
+    .select("id, brand_id, name, slug, subtitle, concentration, status, created_at, collection")
+    .order("name");
+
+  let rawProducts: Array<{
+    id: string;
+    brand_id: string;
+    name: string;
+    slug: string;
+    subtitle: string | null;
+    concentration: string | null;
+    status: string;
+    created_at: string;
+    collection?: string | null;
+  }> = [];
+
+  let productsError = firstAttempt.error;
+
+  if (firstAttempt.error) {
+    const fallbackAttempt = await db
+      .from("products")
+      .select("id, brand_id, name, slug, subtitle, concentration, status, created_at")
+      .order("name");
+    rawProducts = (fallbackAttempt.data as typeof rawProducts) ?? [];
+    productsError = fallbackAttempt.error;
+  } else {
+    rawProducts = (firstAttempt.data as typeof rawProducts) ?? [];
+  }
+
+  const [variantsRes, levelsRes, brandsRes, mediaRes] = await Promise.all([
     db.from("product_variants").select("id, product_id, label, sku, size_ml, price_minor, currency, is_available, low_stock_limit").order("size_ml"),
     db.from("inventory_levels").select("variant_id, on_hand, reserved"),
     db.from("brands").select("id, name"),
     db.from("product_media").select("product_id, storage_path, is_primary").order("sort_order"),
   ]);
 
-  if (productsRes.error || variantsRes.error || levelsRes.error) {
-    throw new Error("Unable to load product catalogue.", { cause: productsRes.error ?? variantsRes.error ?? levelsRes.error });
+  if (productsError || variantsRes.error || levelsRes.error) {
+    throw new Error("Unable to load product catalogue.", { cause: productsError ?? variantsRes.error ?? levelsRes.error });
   }
 
   const brandsMap = new Map((brandsRes.data ?? []).map((b) => [b.id, b.name]));
@@ -117,12 +148,13 @@ export async function getAdminProducts(): Promise<AdminProductWithVariants[]> {
     variantsByProduct.set(v.product_id, list);
   }
 
-  return (productsRes.data ?? []).map((p) => ({
+  return rawProducts.map((p) => ({
     id: p.id,
     name: p.name,
     slug: p.slug,
     subtitle: p.subtitle,
-    concentration: p.concentration,
+    concentration: p.concentration ?? "EDP",
+    collection: ((p as { collection?: string | null }).collection as "premium" | "regular" | null) ?? resolveProductCollection(p),
     status: p.status,
     created_at: p.created_at,
     brand_name: brandsMap.get(p.brand_id) ?? "Solure Scents",

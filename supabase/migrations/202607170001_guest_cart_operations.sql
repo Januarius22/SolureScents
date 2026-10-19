@@ -183,10 +183,10 @@ begin
 end;
 $$;
 
--- 9. Permissions: Revoke execution from public and anon; grant exclusively to service_role
-revoke all on function public.add_guest_cart_item(text, uuid, integer) from public, anon;
-revoke all on function public.update_guest_cart_item(text, uuid, integer) from public, anon;
-revoke all on function public.remove_guest_cart_item(text, uuid) from public, anon;
+-- 9. Permissions: Revoke execution from public, anon, authenticated; grant exclusively to service_role
+revoke all on function public.add_guest_cart_item(text, uuid, integer) from public, anon, authenticated;
+revoke all on function public.update_guest_cart_item(text, uuid, integer) from public, anon, authenticated;
+revoke all on function public.remove_guest_cart_item(text, uuid) from public, anon, authenticated;
 
 grant execute on function public.add_guest_cart_item(text, uuid, integer) to service_role;
 grant execute on function public.update_guest_cart_item(text, uuid, integer) to service_role;

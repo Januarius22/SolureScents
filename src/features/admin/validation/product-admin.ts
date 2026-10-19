@@ -6,6 +6,7 @@ export const productStatusEnum = z.enum(["draft", "active", "archived"]);
 export const variantStatusEnum = z.enum(["draft", "active", "discontinued"]);
 export const notePositionEnum = z.enum(["top", "heart", "base"]);
 export const productCategoryEnum = z.enum(["unisex", "men", "women"]);
+export const perfumeCollectionEnum = z.enum(["premium", "regular"]);
 
 /** Utility to convert a title to a URL-safe lowercase slug */
 export function generateSlug(text: string): string {
@@ -57,6 +58,7 @@ export const productAdminFormSchema = z
     brand_name: z.string().trim().min(2, "Brand name must be at least 2 characters").max(120).default("Solure Scents"),
     brand_id: z.string().uuid().optional().nullable(),
     category: productCategoryEnum.default("unisex"),
+    collection: perfumeCollectionEnum.default("regular"),
     subtitle: z.string().trim().max(255).optional().nullable(),
     description: z
       .string()

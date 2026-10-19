@@ -4,12 +4,15 @@ export const productFiltersSchema = z.object({
   brandId: z.uuid().optional(),
   collectionId: z.uuid().optional(),
   concentration: z.enum(["edc", "edt", "edp", "parfum", "extrait", "oil"]).optional(),
+  category: z.enum(["unisex", "men", "women"]).optional(),
+  collection: z.enum(["premium", "regular"]).optional(),
   familyId: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(48).default(24),
   maximumPriceMinor: z.coerce.number().int().nonnegative().optional(),
   minimumPriceMinor: z.coerce.number().int().nonnegative().optional(),
   page: z.coerce.number().int().min(1).default(1),
   query: z.string().trim().max(100).optional(),
+  sort: z.enum(["newest", "price_asc", "price_desc", "name_asc"]).default("newest").optional(),
 }).refine(
   ({ maximumPriceMinor, minimumPriceMinor }) =>
     maximumPriceMinor === undefined || minimumPriceMinor === undefined || maximumPriceMinor >= minimumPriceMinor,

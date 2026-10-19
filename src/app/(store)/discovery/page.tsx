@@ -153,18 +153,18 @@ export default async function Page({ searchParams }: PageProps<"/discovery">) {
             </div>
 
             {matches.length ? (
-              <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-10 grid grid-cols-2 gap-3 sm:gap-5 md:grid-cols-3 lg:grid-cols-4">
                 {matches.map((match, index) => (
-                  <div className="relative border bg-white p-4 shadow-[0_18px_55px_rgba(29,27,25,0.06)]" key={match.product.id}>
-                    <div className="absolute right-7 top-7 z-10 bg-charcoal px-3 py-2 text-[0.62rem] tracking-[0.14em] text-white uppercase">
+                  <div className="relative border bg-white p-2.5 sm:p-4 shadow-[0_18px_55px_rgba(29,27,25,0.06)] flex flex-col justify-between" key={match.product.id}>
+                    <div className="absolute right-4 top-4 sm:right-7 sm:top-7 z-10 bg-charcoal px-2 py-1 sm:px-3 sm:py-2 text-[0.55rem] sm:text-[0.62rem] tracking-[0.14em] text-white uppercase shadow-sm">
                       {match.score}% match
                     </div>
                     <ProductCard product={match.product} />
-                    <div className="mt-5 border-t pt-4">
-                      <p className="text-[0.62rem] font-semibold tracking-[0.16em] text-gold uppercase">
+                    <div className="mt-3 sm:mt-5 border-t pt-3 sm:pt-4">
+                      <p className="text-[0.55rem] sm:text-[0.62rem] font-semibold tracking-[0.16em] text-gold uppercase">
                         Match {String(index + 1).padStart(2, "0")}
                       </p>
-                      <p className="mt-2 text-xs leading-5 text-muted">{match.reasons.join(". ")}.</p>
+                      <p className="mt-1 sm:mt-2 text-[11px] sm:text-xs leading-4 sm:leading-5 text-muted">{match.reasons.join(". ")}.</p>
                     </div>
                   </div>
                 ))}

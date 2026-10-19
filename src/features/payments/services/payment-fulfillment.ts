@@ -132,9 +132,26 @@ export async function finalizeSuccessfulPayment(
       (rpcPayment as Record<string, unknown>).reconciliation_reason ||
       (rpcPayment.metadata as Record<string, unknown> | null)?.reconciliation_reason;
 
+    let orderNumber: string | undefined = (payload.metadata?.orderNumber as string) || undefined;
+    if (!orderNumber && rpcPayment.order_id) {
+      try {
+        const { data: ord } = await dbClient
+          .from("orders")
+          .select("order_number")
+          .eq("id", rpcPayment.order_id)
+          .single();
+        if (ord?.order_number) {
+          orderNumber = ord.order_number;
+        }
+      } catch {
+        // Continue without blocking
+      }
+    }
+
     return {
       success: true,
       orderId: rpcPayment.order_id,
+      orderNumber,
       alreadyProcessed: isAlreadyCaptured,
       operationalStatus: requiresReconciliation
         ? "reconciliation_required"

@@ -37,7 +37,7 @@ export default async function ProductPage({ params }: PageProps<"/shop/[slug]">)
     name: product.name,
     description: product.description,
     brand: { "@type": "Brand", name: product.brand.name },
-    offers: product.variants.map((v) => ({
+    offers: product.variants.map((v: { price_minor: number; currency: string }) => ({
       "@type": "Offer",
       price: v.price_minor / 100,
       priceCurrency: v.currency,
@@ -74,11 +74,22 @@ export default async function ProductPage({ params }: PageProps<"/shop/[slug]">)
           <div className="flex flex-col justify-between space-y-8">
             <div>
               {/* Brand & Concentration Eyebrow */}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className="h-px w-6 bg-gold" />
                 <p className="text-[0.66rem] font-semibold tracking-[0.24em] text-gold uppercase">
                   {product.brand.name} · {product.concentration.toUpperCase()}
                 </p>
+                {Boolean(product.collection) && (
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold tracking-[0.18em] uppercase rounded-sm ${
+                      product.collection === "premium"
+                        ? "bg-gold/15 text-gold border border-gold/40 shadow-sm"
+                        : "bg-charcoal/10 text-charcoal border border-charcoal/20"
+                    }`}
+                  >
+                    {product.collection === "premium" ? "✦ Premium Collection" : "Regular Collection"}
+                  </span>
+                )}
               </div>
 
               {/* Fragrance Title */}
@@ -126,7 +137,7 @@ export default async function ProductPage({ params }: PageProps<"/shop/[slug]">)
                         <span className="text-[10px] text-muted italic">Initial 15–30 mins</span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {product.notes.top.map((note) => (
+                        {product.notes.top.map((note: string) => (
                           <span
                             key={note}
                             className="border border-charcoal/15 bg-white px-3 py-1 text-xs font-medium text-charcoal shadow-xs"
@@ -148,7 +159,7 @@ export default async function ProductPage({ params }: PageProps<"/shop/[slug]">)
                         <span className="text-[10px] text-muted italic">2 to 6 hours</span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {product.notes.heart.map((note) => (
+                        {product.notes.heart.map((note: string) => (
                           <span
                             key={note}
                             className="border border-charcoal/15 bg-white px-3 py-1 text-xs font-medium text-charcoal shadow-xs"
@@ -170,7 +181,7 @@ export default async function ProductPage({ params }: PageProps<"/shop/[slug]">)
                         <span className="text-[10px] text-muted italic">Enduring drydown</span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {product.notes.base.map((note) => (
+                        {product.notes.base.map((note: string) => (
                           <span
                             key={note}
                             className="border border-charcoal/15 bg-white px-3 py-1 text-xs font-medium text-charcoal shadow-xs"
@@ -219,7 +230,7 @@ export default async function ProductPage({ params }: PageProps<"/shop/[slug]">)
                     Nationwide Courier
                   </p>
                   <p className="mt-1 text-[11px] text-muted leading-relaxed">
-                    Same-day delivery across Lagos; insured delivery to all 36 States & FCT.
+                    Direct dispatch from our Abuja Atelier; insured delivery across all 36 States & FCT.
                   </p>
                 </div>
 

@@ -44,8 +44,29 @@ const statusBadgeClasses: Record<string, string> = {
   refunded: "bg-rose-100 text-rose-900 border-rose-300",
 };
 
-export default async function AdminOrdersPage() {
-  const { orders, payments, orderItems } = await getCommerceOperations();
+import { AdminPagination } from "@/features/admin/components/admin-pagination";
+
+export default async function AdminOrdersPage({
+  searchParams,
+}: PageProps<"/admin/orders">) {
+  const params = await searchParams;
+  const rawPage = typeof params.page === "string" ? params.page : undefined;
+  const page =
+    rawPage && !Number.isNaN(Number(rawPage)) && Number(rawPage) > 0
+      ? Math.floor(Number(rawPage))
+      : 1;
+
+  const pageSize = 10;
+  const { orders, payments, orderItems, variants } = await getCommerceOperations();
+  const variantsById = new Map(variants.map((v) => [v.id, v]));
+
+  const totalCount = orders.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const validPage = Math.max(1, Math.min(page, totalPages || 1));
+  const pagedOrders = orders.slice(
+    (validPage - 1) * pageSize,
+    validPage * pageSize,
+  );
 
   const itemsByOrder = new Map<string, typeof orderItems>();
   for (const item of orderItems) {
@@ -130,7 +151,7 @@ export default async function AdminOrdersPage() {
 
       {/* Orders List */}
       <div className="space-y-6">
-        {orders.map((order) => {
+        {pagedOrders.map((order) => {
           const statusBadge = statusColors(order.status);
           const shipping =
             typeof order.shipping_address === "object" && order.shipping_address !== null
@@ -182,6 +203,17 @@ export default async function AdminOrdersPage() {
                     <span className="border border-charcoal/15 bg-ivory px-2.5 py-0.5 rounded text-[0.62rem] font-medium uppercase text-charcoal/70">
                       Fulfillment: {order.fulfillment_status.replace("_", " ")}
                     </span>
+                    <span className={`border px-2.5 py-0.5 rounded text-[0.62rem] font-semibold uppercase tracking-wider ${
+                      order.delivery_status === "arranged_separately" || order.delivery_status === "pending"
+                        ? "border-amber-300 bg-amber-50 text-amber-900"
+                        : order.delivery_status === "configured"
+                        ? "border-blue-300 bg-blue-50 text-blue-900"
+                        : "border-emerald-300 bg-emerald-50 text-emerald-900"
+                    }`}>
+                      Delivery: {order.delivery_status === "arranged_separately" || order.delivery_status === "pending"
+                        ? "Delivery Arrangement Pending"
+                        : order.delivery_status}
+                    </span>
                     {latestPayment && (
                       <span className={`border px-2.5 py-0.5 rounded text-[0.62rem] font-medium uppercase ${
                         latestPayment.status === "captured"
@@ -217,27 +249,32 @@ export default async function AdminOrdersPage() {
                 </div>
               </div>
 
-              {/* Purchased Fragrances and Quantities */}
+              {/* Purchased Fragrances, Bottle Sizes and Quantities */}
               {orderProducts.length > 0 && (
                 <div className="mt-4 border-b border-charcoal/10 pb-4">
                   <p className="text-[0.62rem] font-semibold tracking-wider text-muted uppercase mb-2">
                     Purchased Fragrances ({orderProducts.reduce((s, i) => s + i.quantity, 0)} flacons)
                   </p>
                   <div className="space-y-1.5 divide-y divide-charcoal/5">
-                    {orderProducts.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between pt-1.5 text-xs text-charcoal">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{item.product_name}</span>
-                          <span className="text-muted">({item.variant_label})</span>
-                          <span className="rounded bg-ivory px-2 py-0.5 font-mono text-[11px] font-semibold">
-                            × {item.quantity}
+                    {orderProducts.map((item, idx) => {
+                      const variant = item.variant_id ? variantsById.get(item.variant_id) : undefined;
+                      return (
+                        <div key={idx} className="flex items-center justify-between pt-1.5 text-xs text-charcoal">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{item.product_name}</span>
+                            <span className="text-muted">
+                              ({item.variant_label}{variant?.size_ml ? ` · ${variant.size_ml}ml` : ""})
+                            </span>
+                            <span className="rounded bg-ivory px-2 py-0.5 font-mono text-[11px] font-semibold">
+                              × {item.quantity}
+                            </span>
+                          </div>
+                          <span className="font-mono font-medium">
+                            <Money amount={item.unit_price_minor * item.quantity} currency={item.currency} />
                           </span>
                         </div>
-                        <span className="font-mono font-medium">
-                          <Money amount={item.unit_price_minor * item.quantity} currency={item.currency} />
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -326,6 +363,23 @@ export default async function AdminOrdersPage() {
 
                   <div>
                     <label className="mb-1 block text-[0.62rem] font-semibold tracking-wider uppercase text-muted">
+                      Delivery Arrangement
+                    </label>
+                    <select
+                      aria-label="Delivery arrangement"
+                      className={inputClass}
+                      defaultValue={order.delivery_status ?? "arranged_separately"}
+                      name="delivery_status"
+                    >
+                      <option value="arranged_separately">Delivery Arrangement Pending</option>
+                      <option value="pending">Pending</option>
+                      <option value="configured">Configured Courier</option>
+                      <option value="free">Complimentary</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[0.62rem] font-semibold tracking-wider uppercase text-muted">
                       Courier / Carrier
                     </label>
                     <input
@@ -396,6 +450,15 @@ export default async function AdminOrdersPage() {
             </p>
           </div>
         )}
+
+        <AdminPagination
+          currentPage={validPage}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          baseUrl="/admin/orders"
+          searchParams={{}}
+          itemLabel="orders"
+        />
       </div>
     </div>
   );
