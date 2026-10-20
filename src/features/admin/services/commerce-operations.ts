@@ -163,48 +163,100 @@ export async function getAdminProducts(): Promise<AdminProductWithVariants[]> {
   }));
 }
 
+export interface AdminCustomerSummary {
+  email: string;
+  name?: string;
+  phone?: string;
+  orderCount: number;
+  totalSpentMinor: number;
+  currency: string;
+  lastOrderDate: string;
+  lastOrderNumber: string;
+  shippingCity?: string;
+  shippingState?: string;
+  shippingCountry?: string;
+}
+
 export async function getAdminCustomers(): Promise<AdminCustomerSummary[]> {
   await requireApplicationAccess("admin");
-  const db = await createServerSupabaseClient();
+  const db = createPrivilegedSupabaseClient() ?? (await createServerSupabaseClient());
 
-  const { data: orders, error } = await db
-    .from("orders")
-    .select("order_number, customer_email, total_minor, currency, created_at, shipping_address, status")
-    .order("created_at", { ascending: false });
+  const [ordersRes, paymentsRes] = await Promise.all([
+    db
+      .from("orders")
+      .select("id, order_number, customer_email, total_minor, currency, created_at, shipping_address, status")
+      .order("created_at", { ascending: false }),
+    db
+      .from("payments")
+      .select("order_id, amount_minor, refunded_minor, status")
+      .in("status", ["captured", "partially_refunded"]),
+  ]);
 
-  if (error) {
-    throw new Error("Unable to load customer directory.", { cause: error });
+  if (ordersRes.error) {
+    throw new Error("Unable to load customer directory.", { cause: ordersRes.error });
+  }
+
+  // Map of order_id to authoritative captured amount
+  const paidByOrderId = new Map<string, number>();
+  for (const p of paymentsRes.data ?? []) {
+    const netPaid = Number(p.amount_minor) - Number(p.refunded_minor || 0);
+    paidByOrderId.set(p.order_id, (paidByOrderId.get(p.order_id) ?? 0) + Math.max(netPaid, 0));
   }
 
   const map = new Map<string, AdminCustomerSummary>();
 
-  for (const o of orders ?? []) {
-    const email = o.customer_email;
-    if (!email) continue;
+  for (const o of ordersRes.data ?? []) {
+    const rawEmail = o.customer_email?.trim();
+    if (!rawEmail) continue;
+    const emailKey = rawEmail.toLowerCase();
 
-    const existing = map.get(email);
-    const shipping = typeof o.shipping_address === "object" && o.shipping_address !== null
-      ? (o.shipping_address as Record<string, unknown>)
-      : {};
+    const existing = map.get(emailKey);
+    const shipping =
+      typeof o.shipping_address === "object" && o.shipping_address !== null
+        ? (o.shipping_address as Record<string, unknown>)
+        : {};
 
-    const city = typeof shipping.city === "string" ? shipping.city : undefined;
+    const name =
+      typeof shipping.recipientName === "string"
+        ? shipping.recipientName
+        : typeof shipping.name === "string"
+        ? shipping.name
+        : undefined;
+
+    const phone = typeof shipping.phone === "string" ? shipping.phone : undefined;
+    const city =
+      typeof shipping.cityOrLga === "string"
+        ? shipping.cityOrLga
+        : typeof shipping.city === "string"
+        ? shipping.city
+        : undefined;
+    const state = typeof shipping.state === "string" ? shipping.state : undefined;
     const country = typeof shipping.country === "string" ? shipping.country : undefined;
 
+    // Verified spending from captured payments, or fallback to total_minor if order is already confirmed/delivered
+    const orderVerifiedSpent = paidByOrderId.get(o.id) ?? (["confirmed", "processing", "shipped", "delivered"].includes(o.status) ? Number(o.total_minor) : 0);
+
     if (!existing) {
-      map.set(email, {
-        email,
+      map.set(emailKey, {
+        email: rawEmail,
+        name,
+        phone,
         orderCount: 1,
-        totalSpentMinor: Number(o.total_minor),
-        currency: o.currency,
+        totalSpentMinor: orderVerifiedSpent,
+        currency: o.currency ?? "NGN",
         lastOrderDate: o.created_at,
         lastOrderNumber: o.order_number,
         shippingCity: city,
+        shippingState: state,
         shippingCountry: country,
       });
     } else {
       existing.orderCount += 1;
-      existing.totalSpentMinor += Number(o.total_minor);
+      existing.totalSpentMinor += orderVerifiedSpent;
+      if (!existing.name && name) existing.name = name;
+      if (!existing.phone && phone) existing.phone = phone;
       if (!existing.shippingCity && city) existing.shippingCity = city;
+      if (!existing.shippingState && state) existing.shippingState = state;
       if (!existing.shippingCountry && country) existing.shippingCountry = country;
     }
   }

@@ -7,6 +7,8 @@ interface AdminPaginationProps {
   baseUrl: string;
   searchParams?: Record<string, string | undefined>;
   itemLabel?: string;
+  pageSizeOptions?: number[];
+  showPageSizeSelector?: boolean;
 }
 
 export function AdminPagination({
@@ -16,35 +18,36 @@ export function AdminPagination({
   baseUrl,
   searchParams = {},
   itemLabel = "records",
+  pageSizeOptions = [10, 20, 50],
+  showPageSizeSelector = true,
 }: AdminPaginationProps) {
   const totalPages = Math.ceil(totalCount / pageSize);
-  if (totalPages <= 1 && totalCount <= pageSize) {
-    return (
-      <div className="flex items-center justify-between border-t border-charcoal/10 pt-4 text-xs text-muted">
-        <p>
-          Showing all <strong className="font-semibold text-charcoal">{totalCount}</strong> {itemLabel}
-        </p>
-      </div>
-    );
-  }
+
+  const buildQueryHref = (newPage?: number, newPageSize?: number) => {
+    const sp = new URLSearchParams();
+    Object.entries(searchParams).forEach(([k, v]) => {
+      if (v !== undefined && v !== "" && k !== "page" && k !== "pageSize" && k !== "limit") {
+        sp.set(k, v);
+      }
+    });
+
+    const targetPageSize = newPageSize ?? pageSize;
+    if (targetPageSize !== 10) {
+      sp.set("pageSize", String(targetPageSize));
+    }
+
+    const targetPage = newPage ?? currentPage;
+    if (targetPage > 1 && !newPageSize) {
+      sp.set("page", String(targetPage));
+    }
+
+    const qs = sp.toString();
+    return qs ? `${baseUrl}?${qs}` : baseUrl;
+  };
 
   const validPage = Math.max(1, Math.min(currentPage, totalPages || 1));
   const fromIndex = totalCount > 0 ? (validPage - 1) * pageSize + 1 : 0;
   const toIndex = Math.min(validPage * pageSize, totalCount);
-
-  const buildPageHref = (page: number) => {
-    const sp = new URLSearchParams();
-    Object.entries(searchParams).forEach(([k, v]) => {
-      if (v !== undefined && v !== "" && k !== "page") {
-        sp.set(k, v);
-      }
-    });
-    if (page > 1) {
-      sp.set("page", String(page));
-    }
-    const qs = sp.toString();
-    return qs ? `${baseUrl}?${qs}` : baseUrl;
-  };
 
   const pageNumbers: (number | "...")[] = [];
   if (totalPages <= 7) {
@@ -64,10 +67,41 @@ export function AdminPagination({
       aria-label="Admin pagination"
       className="mt-6 flex flex-col gap-4 border-t border-charcoal/10 pt-5 sm:flex-row sm:items-center sm:justify-between"
     >
-      <p className="text-xs text-muted">
-        Showing <strong className="font-semibold text-charcoal">{fromIndex}–{toIndex}</strong> of{" "}
-        <strong className="font-semibold text-charcoal">{totalCount}</strong> {itemLabel}
-      </p>
+      {/* Information & Page Size Selector */}
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+        <p>
+          Showing{" "}
+          <strong className="font-semibold text-charcoal">
+            {fromIndex}–{toIndex}
+          </strong>{" "}
+          of <strong className="font-semibold text-charcoal">{totalCount}</strong> {itemLabel}
+        </p>
+
+        {showPageSizeSelector && totalCount > 10 && (
+          <div className="flex items-center gap-1.5 border-l border-charcoal/15 pl-3">
+            <span className="text-[11px] text-muted">Per page:</span>
+            <div className="inline-flex rounded border border-charcoal/15 bg-white p-0.5 shadow-xs">
+              {pageSizeOptions.map((sz) => {
+                const isActive = pageSize === sz;
+                return (
+                  <Link
+                    key={sz}
+                    href={buildQueryHref(1, sz)}
+                    className={`rounded px-2 py-0.5 text-[11px] font-semibold transition ${
+                      isActive
+                        ? "bg-charcoal text-pearl font-bold shadow-xs"
+                        : "text-charcoal/70 hover:bg-ivory hover:text-gold"
+                    }`}
+                    aria-label={`Show ${sz} per page`}
+                  >
+                    {sz}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
 
       {totalPages > 1 && (
         <>
@@ -75,7 +109,7 @@ export function AdminPagination({
           <div className="hidden sm:flex items-center gap-1.5">
             {validPage > 1 ? (
               <Link
-                href={buildPageHref(validPage - 1)}
+                href={buildQueryHref(validPage - 1)}
                 className="inline-flex min-h-9 items-center justify-center border border-charcoal/20 bg-white px-3 text-xs font-semibold uppercase tracking-wider text-charcoal transition hover:border-gold hover:text-gold"
               >
                 ← Prev
@@ -104,7 +138,7 @@ export function AdminPagination({
               return (
                 <Link
                   key={p}
-                  href={buildPageHref(p)}
+                  href={buildQueryHref(p)}
                   aria-current={isActive ? "page" : undefined}
                   className={`flex size-9 items-center justify-center border text-xs font-semibold transition ${
                     isActive
@@ -119,7 +153,7 @@ export function AdminPagination({
 
             {validPage < totalPages ? (
               <Link
-                href={buildPageHref(validPage + 1)}
+                href={buildQueryHref(validPage + 1)}
                 className="inline-flex min-h-9 items-center justify-center border border-charcoal/20 bg-white px-3 text-xs font-semibold uppercase tracking-wider text-charcoal transition hover:border-gold hover:text-gold"
               >
                 Next →
@@ -138,7 +172,7 @@ export function AdminPagination({
           <div className="flex sm:hidden items-center justify-between gap-2">
             {validPage > 1 ? (
               <Link
-                href={buildPageHref(validPage - 1)}
+                href={buildQueryHref(validPage - 1)}
                 className="inline-flex min-h-9 flex-1 items-center justify-center border border-charcoal/20 bg-white px-3 text-xs font-semibold uppercase tracking-wider text-charcoal"
               >
                 ← Prev
@@ -159,7 +193,7 @@ export function AdminPagination({
 
             {validPage < totalPages ? (
               <Link
-                href={buildPageHref(validPage + 1)}
+                href={buildQueryHref(validPage + 1)}
                 className="inline-flex min-h-9 flex-1 items-center justify-center border border-charcoal/20 bg-white px-3 text-xs font-semibold uppercase tracking-wider text-charcoal"
               >
                 Next →

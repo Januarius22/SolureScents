@@ -47,6 +47,7 @@ alter table public.checkout_sessions add column if not exists guest_session_hash
 -- 9. Update inventory_reservations to support direct order linkages
 alter table public.inventory_reservations alter column checkout_session_id drop not null;
 alter table public.inventory_reservations add column if not exists order_id uuid references public.orders(id) on delete cascade;
+alter table public.inventory_reservations add column if not exists variant_id uuid references public.product_variants(id);
 
 alter table public.inventory_reservations drop constraint if exists inventory_reservations_target_check;
 alter table public.inventory_reservations add constraint inventory_reservations_target_check 
@@ -365,6 +366,7 @@ begin
     for v_stale_res in
       select r.id, r.inventory_level_id, r.quantity
       from public.inventory_reservations r
+      join public.inventory_levels l on l.id = r.inventory_level_id
       left join public.orders o on o.id = r.order_id
       where r.variant_id = v_item.variant_id
         and r.status = 'active'
@@ -393,15 +395,16 @@ begin
     end loop;
 
     -- Check if active unexpired reservation already exists for this order and variant
-    select * into v_existing_res
-    from public.inventory_reservations
-    where order_id = p_order_id
-      and variant_id = v_item.variant_id
-      and status = 'active'
-      and expires_at > now()
-    order by id asc
+    select r.* into v_existing_res
+    from public.inventory_reservations r
+    join public.inventory_levels l on l.id = r.inventory_level_id
+    where r.order_id = p_order_id
+      and l.variant_id = v_item.variant_id
+      and r.status = 'active'
+      and r.expires_at > now()
+    order by r.id asc
     limit 1
-    for update;
+    for update of r;
 
     if v_existing_res.id is not null then
       -- Verify the linked inventory level and location

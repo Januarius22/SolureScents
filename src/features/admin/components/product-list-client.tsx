@@ -39,7 +39,7 @@ export function ProductListClient({ initialProducts }: ProductListClientProps) {
   const [isPending, startTransition] = useTransition();
   const [actioningId, setActioningId] = useState<string | null>(null);
 
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState<number>(10); // const pageSize = 10;
 
   // Toggle individual product card expansion
   const toggleExpanded = (id: string) => {
@@ -519,16 +519,47 @@ export function ProductListClient({ initialProducts }: ProductListClientProps) {
       </div>
 
       {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <nav
-          aria-label="Admin products pagination"
-          className="flex flex-col gap-4 border-t border-charcoal/10 pt-5 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <p className="text-xs text-muted">
-            Page <strong className="text-charcoal font-semibold">{validPage}</strong> of{" "}
-            <strong className="text-charcoal font-semibold">{totalPages}</strong>
+      <nav
+        aria-label="Admin products pagination"
+        className="flex flex-col gap-4 border-t border-charcoal/10 pt-5 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+          <p>
+            Showing{" "}
+            <strong className="text-charcoal font-semibold">
+              {filteredProducts.length > 0 ? (validPage - 1) * pageSize + 1 : 0}–
+              {Math.min(validPage * pageSize, filteredProducts.length)}
+            </strong>{" "}
+            of <strong className="text-charcoal font-semibold">{filteredProducts.length}</strong> fragrances
           </p>
 
+          {filteredProducts.length > 10 && (
+            <div className="flex items-center gap-1.5 border-l border-charcoal/15 pl-3">
+              <span className="text-[11px] text-muted">Per page:</span>
+              <div className="inline-flex rounded border border-charcoal/15 bg-white p-0.5 shadow-xs">
+                {[10, 20, 50].map((sz) => (
+                  <button
+                    key={sz}
+                    type="button"
+                    onClick={() => {
+                      setPageSize(sz);
+                      setCurrentPage(1);
+                    }}
+                    className={`rounded px-2 py-0.5 text-[11px] font-semibold transition ${
+                      pageSize === sz
+                        ? "bg-charcoal text-pearl font-bold shadow-xs"
+                        : "text-charcoal/70 hover:bg-ivory hover:text-gold"
+                    }`}
+                  >
+                    {sz}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {totalPages > 1 && (
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -565,8 +596,9 @@ export function ProductListClient({ initialProducts }: ProductListClientProps) {
               Next →
             </button>
           </div>
-        </nav>
-      )}
+        )}
+      </nav>
+
     </div>
   );
 }

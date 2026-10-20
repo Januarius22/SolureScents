@@ -12,6 +12,8 @@ import { paystackGateway } from "@/features/payments/services/paystack-gateway";
 import { ShieldCheck, AlertCircle } from "lucide-react";
 
 import { AdminPagination } from "@/features/admin/components/admin-pagination";
+import { PaymentFiltersToolbar } from "@/features/admin/components/payment-filters-toolbar";
+import { matchesDateWindow } from "@/features/admin/utils/date-range";
 
 export const metadata = {
   title: "Payment Operations & Ledger | Solure Scents Admin",
@@ -20,28 +22,116 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function Page({
-  searchParams,
-}: PageProps<"/admin/payments">) {
+interface PageProps {
+  searchParams: Promise<{
+    page?: string;
+    pageSize?: string;
+    search?: string;
+    status?: string;
+    provider?: string;
+    sort?: string;
+    dateRange?: string;
+  }>;
+}
+
+export default async function Page({ searchParams }: PageProps) {
   const params = await searchParams;
+
+  // Pagination parameters
   const rawPage = typeof params.page === "string" ? params.page : undefined;
   const page =
     rawPage && !Number.isNaN(Number(rawPage)) && Number(rawPage) > 0
       ? Math.floor(Number(rawPage))
       : 1;
 
-  const pageSize = 10;
+  const rawPageSize = typeof params.pageSize === "string" ? params.pageSize : undefined;
+  const pageSize =
+    rawPageSize && [10, 20, 50].includes(Number(rawPageSize))
+      ? Number(rawPageSize)
+      : 10; // Default: pageSize = 10
+
+  // Filters & sorting parameters
+  const searchQuery = params.search?.trim().toLowerCase() ?? "";
+  const statusFilter = params.status ?? "all";
+  const providerFilter = params.provider ?? "all";
+  const sortOption = params.sort ?? "newest";
+  const dateRangeOption = params.dateRange ?? "all";
+
   const d = await getCommerceOperations();
   const orderMap = new Map(d.orders.map((o) => [o.id, o]));
   const isPaystackConfigured = paystackGateway.isConfigured();
 
-  const totalCount = d.payments.length;
+  // Filter raw payments
+  const filteredPayments = d.payments.filter((p) => {
+    const o = orderMap.get(p.order_id);
+    const orderNumber = o?.order_number?.toLowerCase() ?? "";
+    const customerEmail = (p.customer_email ?? o?.customer_email ?? "").toLowerCase();
+    const reference = (p.provider_reference ?? "").toLowerCase();
+
+    // Check search term
+    if (searchQuery) {
+      const matchSearch =
+        orderNumber.includes(searchQuery) ||
+        customerEmail.includes(searchQuery) ||
+        reference.includes(searchQuery);
+      if (!matchSearch) return false;
+    }
+
+    // Check status
+    if (statusFilter !== "all" && p.status !== statusFilter) {
+      return false;
+    }
+
+    // Check provider
+    if (providerFilter !== "all" && p.provider !== providerFilter) {
+      return false;
+    }
+
+    // Check date range
+    if (!matchesDateWindow(p.created_at, dateRangeOption)) {
+      return false;
+    }
+
+    return true;
+  });
+
+  // Sort filtered payments
+  const sortedPayments = [...filteredPayments].sort((a, b) => {
+    if (sortOption === "oldest") {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    }
+    if (sortOption === "highest") {
+      return b.amount_minor - a.amount_minor;
+    }
+    if (sortOption === "lowest") {
+      return a.amount_minor - b.amount_minor;
+    }
+    // Default: newest
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  const totalCount = sortedPayments.length;
   const totalPages = Math.ceil(totalCount / pageSize);
   const validPage = Math.max(1, Math.min(page, totalPages || 1));
-  const pagedPayments = d.payments.slice(
+  const pagedPayments = sortedPayments.slice(
     (validPage - 1) * pageSize,
     validPage * pageSize,
   );
+
+  // Prepare safe CSV export data (no sensitive user data)
+  const exportData = sortedPayments.map((p) => {
+    const o = orderMap.get(p.order_id);
+    return {
+      orderNumber: o?.order_number ?? "Direct",
+      customerEmail: p.customer_email ?? o?.customer_email ?? "Guest",
+      reference: p.provider_reference ?? p.id,
+      provider: p.provider,
+      status: p.status,
+      amountMinor: p.amount_minor,
+      currency: p.currency,
+      createdAt: p.created_at,
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -122,76 +212,114 @@ export default async function Page({
         </form>
       </Panel>
 
-      {/* Payment Ledger */}
-      <Panel title={`Payment Ledger (${d.payments.length} Transactions)`}>
-        {d.payments.length ? (
-          <div className="divide-y divide-charcoal/10">
-            {pagedPayments.map((p) => {
-              const o = orderMap.get(p.order_id);
-              const isCaptured = p.status === "captured";
-              const isPending = p.status === "pending";
+      {/* Task 6: Search & Filters Toolbar */}
+      <PaymentFiltersToolbar
+        currentSearch={params.search}
+        currentStatus={params.status}
+        currentProvider={params.provider}
+        currentSort={params.sort}
+        currentDateRange={params.dateRange}
+        exportData={exportData}
+      />
 
-              return (
-                <div
-                  className="grid gap-3 py-4 text-xs sm:grid-cols-[1.2fr_1fr_1fr_auto] sm:items-center"
-                  key={p.id}
-                >
-                  <div>
-                    <span className="font-mono font-bold text-charcoal">
-                      {o?.order_number ?? "Order Reference"}
-                    </span>
-                    <small className="block text-muted">
-                      Customer: {o?.customer_email ?? "Guest"}
-                    </small>
-                  </div>
+      {/* Task 4 & 5: Scrollable Payment Ledger Table with Sticky Header */}
+      <Panel title={`Payment Ledger (${totalCount} Filtered Transactions)`}>
+        {sortedPayments.length ? (
+          <div>
+            {/* Scrollable Container with Controlled Maximum Height & Sticky Header */}
+            <div className="overflow-x-auto overflow-y-auto max-h-[580px] border border-charcoal/10 rounded">
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 z-10 border-b border-charcoal/15 bg-white shadow-xs">
+                  <tr className="text-muted uppercase tracking-wider text-[11px]">
+                    <th className="py-3 px-4 font-semibold">Order / Customer</th>
+                    <th className="py-3 px-4 font-semibold">Gateway & Reference</th>
+                    <th className="py-3 px-4 font-semibold">Status & Date</th>
+                    <th className="py-3 px-4 font-semibold text-right">Captured Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-charcoal/10">
+                  {pagedPayments.map((p) => {
+                    const o = orderMap.get(p.order_id);
+                    const isCaptured = p.status === "captured";
+                    const isPending = p.status === "pending";
 
-                  <div>
-                    <span className="font-semibold text-charcoal uppercase tracking-wider text-[11px]">
-                      {p.provider === "paystack" ? "Paystack (Test)" : p.provider.replaceAll("_", " ")}
-                    </span>
-                    <span className="block font-mono text-[10px] text-muted truncate max-w-[200px]">
-                      Ref: {p.provider_reference ?? "None"}
-                    </span>
-                  </div>
+                    return (
+                      <tr key={p.id} className="hover:bg-ivory/50 transition-colors">
+                        <td className="py-3.5 px-4 font-medium text-charcoal">
+                          <span className="font-mono font-bold block text-sm">
+                            {o?.order_number ?? "Order Direct"}
+                          </span>
+                          <span className="text-muted text-[11px] block mt-0.5">
+                            Customer: {p.customer_email ?? o?.customer_email ?? "Guest"}
+                          </span>
+                        </td>
 
-                  <div>
-                    <span
-                      className={`inline-block border px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
-                        isCaptured
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                          : isPending
-                          ? "border-amber-300 bg-amber-50 text-amber-800"
-                          : "border-rose-300 bg-rose-50 text-rose-800"
-                      }`}
-                    >
-                      {p.status.replaceAll("_", " ")}
-                    </span>
-                    <span className="block text-[10px] text-muted mt-0.5">
-                      {new Date(p.created_at).toLocaleDateString("en-NG", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </div>
+                        <td className="py-3.5 px-4">
+                          <span className="font-semibold text-charcoal uppercase tracking-wider text-[11px] block">
+                            {p.provider === "paystack"
+                              ? "Paystack (Test)"
+                              : p.provider.replaceAll("_", " ")}
+                          </span>
+                          <span className="font-mono text-[11px] text-muted truncate max-w-[220px] block mt-0.5">
+                            Ref: {p.provider_reference ?? "None"}
+                          </span>
+                        </td>
 
-                  <div className="text-right font-display text-base font-bold text-charcoal sm:text-right">
-                    <Money amount={p.amount_minor} currency={p.currency} />
-                  </div>
-                </div>
-              );
-            })}
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={`inline-block border px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
+                              isCaptured
+                                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                : isPending
+                                ? "border-amber-300 bg-amber-50 text-amber-800"
+                                : "border-rose-300 bg-rose-50 text-rose-800"
+                            }`}
+                          >
+                            {p.status.replaceAll("_", " ")}
+                          </span>
+                          <span className="block text-[11px] text-muted mt-1">
+                            {new Date(p.created_at).toLocaleDateString("en-NG", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right font-display text-base font-bold text-charcoal">
+                          <Money amount={p.amount_minor} currency={p.currency} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls with 10 / 20 / 50 selector */}
             <AdminPagination
               currentPage={validPage}
               pageSize={pageSize}
               totalCount={totalCount}
               baseUrl="/admin/payments"
-              searchParams={{}}
+              searchParams={{
+                search: params.search,
+                status: params.status,
+                provider: params.provider,
+                sort: params.sort,
+                dateRange: params.dateRange,
+              }}
               itemLabel="transactions"
             />
           </div>
         ) : (
-          <Empty>No payment records have been registered in the ledger.</Empty>
+          <Empty>
+            {d.payments.length === 0
+              ? "No payment records have been registered in the ledger."
+              : "No transactions match your current search and filter criteria. Click 'Reset' to view all records."}
+          </Empty>
         )}
       </Panel>
     </div>

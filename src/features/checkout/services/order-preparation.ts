@@ -1,7 +1,7 @@
 import { randomBytes, createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { createServerSupabaseClient, createPrivilegedSupabaseClient } from "@/lib/supabase/server";
-import type { Json, Database } from "@/types/database";
+import type { Json } from "@/types/database";
 import { getActiveCart } from "@/features/cart/services/cart-service";
 import { readGuestSession } from "@/features/cart/services/guest-session";
 import { guestCheckoutSchema, normalizeNigerianPhone, type GuestCheckoutInput } from "../validation/checkout-schema";
@@ -11,25 +11,6 @@ import { reserveOrderInventory } from "./inventory-reservation";
 import type { PreparedOrder, PrepareOrderResult, PreparedOrderItem } from "../types";
 
 const PREPARED_ORDER_COOKIE = "solure_prepared_order_data";
-
-/**
- * Validates whether an error indicates a missing RPC or unapplied migration schema constraint.
- */
-function isMigrationPendingError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const e = error as { code?: string; message?: string; details?: string };
-  return (
-    e.code === "PGRST202" ||
-    e.code === "42883" ||
-    e.code === "23502" || // Not-null constraint violation on legacy profile_id
-    e.code === "23514" || // Check constraint violation if 'arranged_separately' is not yet in enum
-    Boolean(e.message?.includes("profile_id")) ||
-    Boolean(e.message?.includes("orders_delivery_status_check")) ||
-    Boolean(e.message?.includes("prepare_guest_order_record")) ||
-    Boolean(e.message?.includes("Could not find the function")) ||
-    Boolean(e.message?.includes("column \"guest_session_hash\" does not exist"))
-  );
-}
 
 /**
  * Generates an official, human-readable Solure Scents order reference.
@@ -237,18 +218,33 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
 
   // 6. Attempt Atomic Database Persistence
   const dbClient = createPrivilegedSupabaseClient();
-  let persistedInDatabase = false;
-
   if (!dbClient) {
-    console.warn(
-      "[OrderPreparation] FAIL-CLOSED on database write: SUPABASE_SERVICE_ROLE_KEY is not configured on the server. Order state preserved in signed customer session.",
-    );
-  } else {
+    return {
+      success: false,
+      error: "Checkout service configuration error: Privileged database credentials are missing. Please contact support.",
+      code: "DB_UNAVAILABLE",
+    };
+  }
 
-  try {
-    // Attempt RPC preparation function first
-    let rpcDeliveryStatus: string = deliveryQuote.status;
-    let { data: rpcOrder, error: rpcError } = await dbClient.rpc("prepare_guest_order_record", {
+  let rpcDeliveryStatus: string = deliveryQuote.status;
+  let { data: rpcOrder, error: rpcError } = await dbClient.rpc("prepare_guest_order_record", {
+    p_guest_session_hash: session.tokenHash,
+    p_guest_access_token_hash: guestAccessTokenHash,
+    p_customer_email: formData.email,
+    p_shipping_address: preparedOrder.shippingAddress as unknown as Json,
+    p_billing_address: preparedOrder.billingAddress as unknown as Json,
+    p_customer_note: preparedOrder.customerNote,
+    p_shipping_minor: 0,
+    p_currency: "NGN",
+    p_items: orderItems.map((i) => ({ variant_id: i.variantId, quantity: i.quantity })),
+    p_delivery_status: rpcDeliveryStatus,
+    p_is_total_settled: isTotalSettled,
+  });
+
+  // Check if delivery status constraint failed because migration adding 'arranged_separately' is pending
+  if (rpcError && (rpcError.code === "23514" || rpcError.message?.includes("orders_delivery_status_check"))) {
+    rpcDeliveryStatus = "pending";
+    const retryResult = await dbClient.rpc("prepare_guest_order_record", {
       p_guest_session_hash: session.tokenHash,
       p_guest_access_token_hash: guestAccessTokenHash,
       p_customer_email: formData.email,
@@ -258,110 +254,55 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
       p_shipping_minor: 0,
       p_currency: "NGN",
       p_items: orderItems.map((i) => ({ variant_id: i.variantId, quantity: i.quantity })),
-      p_delivery_status: rpcDeliveryStatus,
+      p_delivery_status: "pending",
       p_is_total_settled: isTotalSettled,
     });
-
-    // Check if delivery status constraint failed because migration adding 'arranged_separately' is pending
-    if (rpcError && (rpcError.code === "23514" || rpcError.message?.includes("orders_delivery_status_check"))) {
-      rpcDeliveryStatus = "pending";
-      const retryResult = await dbClient.rpc("prepare_guest_order_record", {
-        p_guest_session_hash: session.tokenHash,
-        p_guest_access_token_hash: guestAccessTokenHash,
-        p_customer_email: formData.email,
-        p_shipping_address: preparedOrder.shippingAddress as unknown as Json,
-        p_billing_address: preparedOrder.billingAddress as unknown as Json,
-        p_customer_note: preparedOrder.customerNote,
-        p_shipping_minor: 0,
-        p_currency: "NGN",
-        p_items: orderItems.map((i) => ({ variant_id: i.variantId, quantity: i.quantity })),
-        p_delivery_status: "pending",
-        p_is_total_settled: isTotalSettled,
-      });
-      rpcOrder = retryResult.data;
-      rpcError = retryResult.error;
-    }
-
-    if (!rpcError && rpcOrder) {
-      preparedOrder.id = rpcOrder.id;
-      preparedOrder.orderNumber = rpcOrder.order_number;
-      persistedInDatabase = true;
-    } else if (isMigrationPendingError(rpcError)) {
-      // Attempt direct insert with service role if RPC is not yet registered
-      const insertDeliveryStatus = deliveryQuote.status;
-      let { data: insertedOrder, error: insertError } = await dbClient
-        .from("orders")
-        .insert({
-          id: orderId,
-          order_number: orderNumber,
-          profile_id: null,
-          guest_session_hash: session.tokenHash,
-          guest_access_token_hash: guestAccessTokenHash,
-          status: "pending",
-          fulfillment_status: "unfulfilled",
-          currency: "NGN",
-          subtotal_minor: calculatedSubtotalMinor,
-          shipping_minor: 0,
-          discount_minor: 0,
-          tax_minor: 0,
-          delivery_status: insertDeliveryStatus as Database["public"]["Tables"]["orders"]["Insert"]["delivery_status"],
-          is_total_settled: isTotalSettled,
-          shipping_address: preparedOrder.shippingAddress as unknown as Json,
-          billing_address: preparedOrder.billingAddress as unknown as Json,
-          customer_email: formData.email,
-          customer_note: preparedOrder.customerNote,
-          expires_at: expiresAt,
-        })
-        .select()
-        .single();
-
-      if (insertError && (insertError.code === "23514" || insertError.message?.includes("orders_delivery_status_check"))) {
-        const retryInsert = await dbClient
-          .from("orders")
-          .insert({
-            id: orderId,
-            order_number: orderNumber,
-            profile_id: null,
-            guest_session_hash: session.tokenHash,
-            guest_access_token_hash: guestAccessTokenHash,
-            status: "pending",
-            fulfillment_status: "unfulfilled",
-            currency: "NGN",
-            subtotal_minor: calculatedSubtotalMinor,
-            shipping_minor: 0,
-            discount_minor: 0,
-            tax_minor: 0,
-            delivery_status: "pending",
-            is_total_settled: isTotalSettled,
-            shipping_address: preparedOrder.shippingAddress as unknown as Json,
-            billing_address: preparedOrder.billingAddress as unknown as Json,
-            customer_email: formData.email,
-            customer_note: preparedOrder.customerNote,
-            expires_at: expiresAt,
-          })
-          .select()
-          .single();
-        insertedOrder = retryInsert.data;
-        insertError = retryInsert.error;
-      }
-
-      if (!insertError && insertedOrder) {
-        persistedInDatabase = true;
-      }
-    }
-  } catch (dbErr) {
-    if (!isMigrationPendingError(dbErr)) {
-      console.warn("[OrderPreparation] Note on DB order persistence:", dbErr);
-    }
+    rpcOrder = retryResult.data;
+    rpcError = retryResult.error;
   }
+
+  if (rpcError || !rpcOrder) {
+    console.error("[OrderPreparation] Failed to persist order in database:", rpcError);
+    return {
+      success: false,
+      error: `Unable to persist order in database: ${rpcError?.message || "Order creation failed"}. Please try again.`,
+      code: "PERSISTENCE_FAILED",
+    };
   }
+
+  // Use the authoritative DB-persisted order ID and number
+  preparedOrder.id = rpcOrder.id;
+  preparedOrder.orderNumber = rpcOrder.order_number;
+  const persistedInDatabase = true;
 
   // 7. Atomically reserve inventory for 15-minute checkout window
-  await reserveOrderInventory(
+  const reservationResult = await reserveOrderInventory(
     preparedOrder.id,
     orderItems.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
     15,
   );
+
+  if (!reservationResult.success) {
+    console.error("[OrderPreparation] Inventory reservation failed:", reservationResult.error);
+    // Cancel the unreserved pending order to prevent ghost orders
+    try {
+      await dbClient
+        .from("orders")
+        .update({
+          status: "cancelled",
+          customer_note: `Cancelled: ${reservationResult.error || "Inventory reservation failed"}`,
+        })
+        .eq("id", preparedOrder.id);
+    } catch (cancelErr) {
+      console.warn("[OrderPreparation] Note on cancelling unreserved order:", cancelErr);
+    }
+
+    return {
+      success: false,
+      error: reservationResult.error || "Unable to reserve required inventory for this order. Please try again.",
+      code: reservationResult.code || "RESERVATION_FAILED",
+    };
+  }
 
   // 8. Issue HTTP-Only Confirmation Authorization Session Cookie (Token-free URL architecture)
   await issueConfirmationAuthorization(
@@ -370,7 +311,7 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
     guestAccessTokenHash,
   );
 
-  // 9. Store Prepared Order in Secure HTTP-Only Cookie Session for seamless fallback
+  // 9. Store Prepared Order in Secure HTTP-Only Cookie Session for client navigation
   const cookieStore = await cookies();
   const orderSessionPayload = JSON.stringify({
     order: preparedOrder,

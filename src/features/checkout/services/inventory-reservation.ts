@@ -62,51 +62,54 @@ export async function reserveOrderInventory(
   const dbClient = createPrivilegedSupabaseClient();
   const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString();
 
-  try {
-    if (dbClient) {
-      // Attempt database atomic RPC function if registered
-      const { data, error } = await dbClient.rpc("reserve_order_inventory", {
-        p_order_id: orderId,
-        p_ttl_minutes: ttlMinutes,
-      });
-
-      if (!error && data) {
-        return {
-          success: true,
-          orderId,
-          reservedItems: items,
-          expiresAt,
-        };
-      }
-    }
-  } catch {
-    // If RPC is pending migration, continue with graceful application-level tracking
+  if (!dbClient) {
+    return {
+      success: false,
+      orderId,
+      error: "Server database configuration error: Privileged client unavailable.",
+      code: "DB_UNAVAILABLE",
+    };
   }
 
-  // Graceful application-level reservation check
-  const variantIds = items.map((i) => i.variantId);
-  const availabilityMap = await getAvailableInventory(variantIds);
+  try {
+    const { data, error } = await dbClient.rpc("reserve_order_inventory", {
+      p_order_id: orderId,
+      p_ttl_minutes: ttlMinutes,
+    });
 
-  for (const item of items) {
-    const snapshot = availabilityMap.get(item.variantId);
-    const available = snapshot ? snapshot.available : 0;
-    // Missing inventory cannot be treated as unlimited stock.
-    // If inventory level does not exist (0 available) or available stock is less than requested, reject.
-    if (available < item.quantity) {
+    if (error) {
+      console.error("[reserveOrderInventory] Database reservation RPC error:", error);
       return {
         success: false,
         orderId,
-        error: `Insufficient stock available for variant ${item.variantId} (requested: ${item.quantity}, available: ${available}).`,
-        code: "INSUFFICIENT_STOCK",
+        error: error.message || "Failed to reserve inventory in database.",
+        code: error.code === "22000" ? "INSUFFICIENT_STOCK" : "RESERVATION_FAILED",
       };
     }
+
+    if (data) {
+      return {
+        success: true,
+        orderId,
+        reservedItems: items,
+        expiresAt,
+      };
+    }
+  } catch (err) {
+    console.error("[reserveOrderInventory] Unexpected exception:", err);
+    return {
+      success: false,
+      orderId,
+      error: err instanceof Error ? err.message : "Inventory reservation failed.",
+      code: "RESERVATION_FAILED",
+    };
   }
 
   return {
-    success: true,
+    success: false,
     orderId,
-    reservedItems: items,
-    expiresAt,
+    error: "Inventory reservation was not confirmed by the database.",
+    code: "RESERVATION_FAILED",
   };
 }
 

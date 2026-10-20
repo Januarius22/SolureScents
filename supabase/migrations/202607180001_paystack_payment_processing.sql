@@ -145,7 +145,7 @@ begin
     join public.inventory_levels l on l.id = r.inventory_level_id
     join public.inventory_locations loc on loc.id = l.location_id
     where r.order_id = p_order_id
-      and r.variant_id = v_order_item.variant_id
+      and l.variant_id = v_order_item.variant_id
       and r.status = 'active'
       and r.expires_at > now()
       and loc.is_active = true;
@@ -321,9 +321,10 @@ begin
   from public.order_items
   where order_id = v_order.id and variant_id is not null;
 
-  select count(distinct variant_id)::integer into v_res_variant_count
-  from public.inventory_reservations
-  where order_id = v_order.id and status = 'active';
+  select count(distinct l.variant_id)::integer into v_res_variant_count
+  from public.inventory_reservations r
+  join public.inventory_levels l on l.id = r.inventory_level_id
+  where r.order_id = v_order.id and r.status = 'active';
 
   if v_order_variant_count <> v_res_variant_count then
     v_is_inventory_dispute := true;
@@ -338,9 +339,10 @@ begin
   if exists (
     select 1
     from public.inventory_reservations r
+    join public.inventory_levels l on l.id = r.inventory_level_id
     where r.order_id = v_order.id
       and r.status = 'active'
-      and r.variant_id not in (
+      and l.variant_id not in (
         select variant_id from public.order_items where order_id = v_order.id and variant_id is not null
       )
   ) then
@@ -361,19 +363,21 @@ begin
     order by variant_id asc
   loop
     -- Check exact inventory_level_id from active reservations for this variant
-    select inventory_level_id into v_reserved_level_id
-    from public.inventory_reservations
-    where order_id = v_order.id 
-      and variant_id = v_item.variant_id 
-      and status = 'active'
+    select r.inventory_level_id into v_reserved_level_id
+    from public.inventory_reservations r
+    join public.inventory_levels l on l.id = r.inventory_level_id
+    where r.order_id = v_order.id 
+      and l.variant_id = v_item.variant_id 
+      and r.status = 'active'
     limit 1;
 
-    select coalesce(sum(quantity), 0)::integer, count(*)::integer
+    select coalesce(sum(r.quantity), 0)::integer, count(*)::integer
     into v_total_active_reserved, v_active_res_count
-    from public.inventory_reservations
-    where order_id = v_order.id 
-      and variant_id = v_item.variant_id 
-      and status = 'active';
+    from public.inventory_reservations r
+    join public.inventory_levels l on l.id = r.inventory_level_id
+    where r.order_id = v_order.id 
+      and l.variant_id = v_item.variant_id 
+      and r.status = 'active';
 
     if v_active_res_count = 0 then
       v_is_inventory_dispute := true;
@@ -396,7 +400,7 @@ begin
 
   -- Validate inventory location, level IDs, physical stock invariants, and expiration
   for v_res in
-    select r.id, r.inventory_level_id, r.variant_id, r.quantity, r.expires_at,
+    select r.id, r.inventory_level_id, l.variant_id, r.quantity, r.expires_at,
            l.id as level_id, l.variant_id as level_variant_id, l.location_id, l.on_hand, l.reserved,
            loc.id as loc_id, loc.is_active as loc_is_active
     from public.inventory_reservations r
@@ -628,11 +632,12 @@ begin
 
     -- Deduct physical stock exactly once and convert the corresponding reservations exactly once
     for v_res in 
-      select r.id, r.inventory_level_id, r.variant_id, r.quantity 
+      select r.id, r.inventory_level_id, l.variant_id, r.quantity 
       from public.inventory_reservations r
+      join public.inventory_levels l on l.id = r.inventory_level_id
       where r.order_id = v_order.id and r.status = 'active'
       order by r.inventory_level_id, r.id
-      for update
+      for update of r
     loop
       update public.inventory_levels
       set

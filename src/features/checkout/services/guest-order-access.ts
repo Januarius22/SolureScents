@@ -46,10 +46,15 @@ export async function getVerifiedGuestOrder(
       const decodedJson = Buffer.from(sessionCookie, "base64url").toString("utf8");
       const parsed = JSON.parse(decodedJson) as {
         order: PreparedOrder;
+        persistedInDatabase?: boolean;
         tokenHash: string;
       };
 
-      if (parsed.order && (parsed.order.id === targetId || parsed.order.orderNumber === targetId)) {
+      if (
+        parsed.order &&
+        parsed.persistedInDatabase !== false &&
+        (parsed.order.id === targetId || parsed.order.orderNumber === targetId)
+      ) {
         const expectedBuf = Buffer.from(parsed.tokenHash, "utf8");
         const providedBuf = Buffer.from(expectedTokenHash, "utf8");
         if (expectedBuf.length === providedBuf.length && timingSafeEqual(expectedBuf, providedBuf)) {
