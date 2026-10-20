@@ -18,7 +18,7 @@ const navigation = [
 ] as const;
 
 const contactLinks = {
-  whatsapp: "https://wa.me/2348000000000",
+  whatsapp: "https://wa.me/2347082189621",
   instagram: "https://www.instagram.com/solurescents/",
   email: "mailto:concierge@solurescents.com",
 } as const;

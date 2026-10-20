@@ -159,17 +159,22 @@ export async function getVerifiedGuestOrder(
       },
       billingAddress: (order.billing_address as Record<string, unknown>) ?? {},
       customerNote: order.customer_note,
-      items: (items ?? []).map((i) => ({
-        variantId: i.variant_id ?? "",
-        productName: i.product_name,
-        variantLabel: i.variant_label,
-        sizeMl: 0,
-        sku: i.sku,
-        quantity: i.quantity,
-        unitPriceMinor: i.unit_price_minor,
-        lineTotalMinor: i.line_total_minor ?? i.unit_price_minor * i.quantity,
-        currency: i.currency,
-      })),
+      items: (items ?? []).map((i) => {
+        const sizeMatch = (i.variant_label || "").match(/(\d+)\s*ml/i);
+        const sizeMl = sizeMatch && sizeMatch[1] ? parseInt(sizeMatch[1], 10) : 0;
+        return {
+          variantId: i.variant_id ?? "",
+          productName: i.product_name,
+          variantLabel: i.variant_label,
+          sizeMl,
+          sku: i.sku,
+          quantity: i.quantity,
+          unitPriceMinor: i.unit_price_minor,
+          lineTotalMinor: i.line_total_minor ?? i.unit_price_minor * i.quantity,
+          currency: i.currency,
+        };
+      }),
+
       expiresAt: order.expires_at ?? new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       guestAccessToken: providedToken ?? "verified_session_auth",
       createdAt: order.created_at,

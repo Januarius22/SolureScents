@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   title: "Admin Command Centre | Solure Scents",
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const statusColors: Record<string, string> = {
   pending: "bg-amber-100 text-amber-900 border-amber-300",
   confirmed: "bg-blue-100 text-blue-900 border-blue-300",
@@ -32,13 +35,20 @@ const statusColors: Record<string, string> = {
 export default async function AdminDashboardPage() {
   const operations = await getCommerceOperations();
 
-  // Count only authoritatively paid orders towards completed gross revenue
-  const paidOrders = operations.orders.filter((o) =>
-    ["confirmed", "processing", "shipped", "delivered"].includes(o.status),
+  // Authoritative payment categorization: only captured payments contribute to gross collected revenue
+  const capturedPayments = operations.payments.filter((p) =>
+    ["captured", "partially_refunded"].includes(p.status),
   );
+  const paidOrderIds = new Set(
+    capturedPayments.map((p) => p.order_id).filter(Boolean) as string[],
+  );
+  const paidOrders = operations.orders.filter((o) => paidOrderIds.has(o.id));
 
-  const grossRevenue = paidOrders.reduce((sum, o) => sum + Number(o.total_minor), 0);
-  const primaryCurrency = operations.orders[0]?.currency ?? "NGN";
+  const grossRevenue = capturedPayments.reduce(
+    (sum, p) => sum + (p.amount_minor || 0) - (p.refunded_minor || 0),
+    0,
+  );
+  const primaryCurrency = operations.orders[0]?.currency ?? operations.payments[0]?.currency ?? "NGN";
 
   const pendingFulfillment = operations.orders.filter(
     (o) => o.status === "confirmed" || o.status === "processing",

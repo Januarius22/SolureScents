@@ -71,12 +71,12 @@ export default async function ProductPage({ params }: PageProps<"/shop/[slug]">)
           </div>
 
           {/* Right Column: Product Narrative, Add to Bag & Guarantees */}
-          <div className="flex flex-col justify-between space-y-8">
+          <div className="flex flex-col justify-between space-y-8 min-w-0">
             <div>
               {/* Brand & Concentration Eyebrow */}
               <div className="flex flex-wrap items-center gap-3">
                 <span className="h-px w-6 bg-gold" />
-                <p className="text-[0.66rem] font-semibold tracking-[0.24em] text-gold uppercase">
+                <p className="text-[0.66rem] font-semibold tracking-[0.24em] text-gold uppercase break-words">
                   {product.brand.name} · {product.concentration.toUpperCase()}
                 </p>
                 {Boolean(product.collection) && (
@@ -93,19 +93,19 @@ export default async function ProductPage({ params }: PageProps<"/shop/[slug]">)
               </div>
 
               {/* Fragrance Title */}
-              <h1 className="mt-4 font-display text-4xl sm:text-5xl lg:text-6xl text-charcoal tracking-tight leading-[1.05]">
+              <h1 className="mt-4 font-display text-4xl sm:text-5xl lg:text-6xl text-charcoal tracking-tight leading-[1.05] break-words">
                 {product.name}
               </h1>
 
               {/* Subtitle / Mood */}
               {product.subtitle && (
-                <p className="mt-2 text-base sm:text-lg font-serif italic text-muted">
+                <p className="mt-2 text-base sm:text-lg font-serif italic text-muted break-words">
                   {product.subtitle}
                 </p>
               )}
 
               {/* Description */}
-              <p className="mt-6 text-sm sm:text-base leading-relaxed text-muted">
+              <p className="mt-6 text-sm sm:text-base leading-relaxed text-muted whitespace-pre-line break-words [overflow-wrap:anywhere]">
                 {product.description}
               </p>
 

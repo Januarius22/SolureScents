@@ -236,8 +236,14 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
   };
 
   // 6. Attempt Atomic Database Persistence
-  const dbClient = createPrivilegedSupabaseClient() ?? (await createServerSupabaseClient());
+  const dbClient = createPrivilegedSupabaseClient();
   let persistedInDatabase = false;
+
+  if (!dbClient) {
+    console.warn(
+      "[OrderPreparation] FAIL-CLOSED on database write: SUPABASE_SERVICE_ROLE_KEY is not configured on the server. Order state preserved in signed customer session.",
+    );
+  } else {
 
   try {
     // Attempt RPC preparation function first
@@ -348,6 +354,7 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
       console.warn("[OrderPreparation] Note on DB order persistence:", dbErr);
     }
   }
+  }
 
   // 7. Atomically reserve inventory for 15-minute checkout window
   await reserveOrderInventory(
@@ -384,4 +391,45 @@ export async function prepareGuestOrder(input: GuestCheckoutInput): Promise<Prep
     success: true,
     order: preparedOrder,
   };
+}
+
+/**
+ * Updates the prepared order status in the secure HTTP-only cookie session upon payment verification.
+ */
+export async function updatePreparedOrderPaymentStatus(
+  targetOrderId: string,
+  paymentStatus: "captured" | "reconciliation_required",
+): Promise<void> {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(PREPARED_ORDER_COOKIE)?.value;
+  if (!sessionCookie) return;
+
+  try {
+    const decodedJson = Buffer.from(sessionCookie, "base64url").toString("utf8");
+    const parsed = JSON.parse(decodedJson) as {
+      order: PreparedOrder;
+      persistedInDatabase: boolean;
+      sessionHash: string;
+      tokenHash: string;
+    };
+
+    if (
+      parsed.order &&
+      (parsed.order.id === targetOrderId || parsed.order.orderNumber === targetOrderId)
+    ) {
+      if (paymentStatus === "captured") {
+        parsed.order.status = "confirmed";
+      }
+      const updatedPayload = JSON.stringify(parsed);
+      cookieStore.set(PREPARED_ORDER_COOKIE, Buffer.from(updatedPayload, "utf8").toString("base64url"), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60, // 1 hour
+      });
+    }
+  } catch {
+    // Ignore invalid cookie
+  }
 }

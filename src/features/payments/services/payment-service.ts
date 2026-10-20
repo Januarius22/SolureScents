@@ -1,7 +1,7 @@
 import { getVerifiedGuestOrder } from "@/features/checkout/services/guest-order-access";
 import { paystackGateway, PaystackConfigurationError } from "./paystack-gateway";
 import { finalizeSuccessfulPayment, finalizeFailedPayment } from "./payment-fulfillment";
-import { createPrivilegedSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
+import { createPrivilegedSupabaseClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
 export interface PaymentInitializationResult {
@@ -41,7 +41,17 @@ export class PaymentService {
     orderId: string,
     origin?: string,
   ): Promise<PaymentInitializationResult> {
-    // 1. Authorize: Verify customer guest session or token ownership
+    // 1. Privileged Credentials Check: Fail closed immediately if server lacks privileged access
+    const dbClient = createPrivilegedSupabaseClient();
+    if (!dbClient) {
+      return {
+        success: false,
+        error: "Privileged database credentials (SUPABASE_SERVICE_ROLE_KEY) are required to verify and authorize payments. External payment initialization is blocked.",
+        code: "GATEWAY_UNCONFIGURED",
+      };
+    }
+
+    // 2. Authorize: Verify customer guest session or token ownership
     const order = await getVerifiedGuestOrder(orderId);
     if (!order) {
       return {
@@ -51,8 +61,23 @@ export class PaymentService {
       };
     }
 
-    // 2. State Validations
-    const orderStatus = order.status as string;
+    // 3. Database Order Existence Check: Cookie-only checkouts cannot accept payment
+    const { data: dbOrder, error: orderError } = await dbClient
+      .from("orders")
+      .select("id, order_number, status, total_minor, currency, expires_at, customer_email, is_total_settled")
+      .or(`id.eq.${order.id},order_number.eq.${order.orderNumber}`)
+      .single();
+
+    if (orderError || !dbOrder) {
+      return {
+        success: false,
+        error: "A real database order record is required to initialize payment. A cookie-only checkout session is not authorized to accept payment. Please complete checkout.",
+        code: "ORDER_NOT_FOUND",
+      };
+    }
+
+    // 4. Order State & Settlement Validations
+    const orderStatus = dbOrder.status as string;
     if (["confirmed", "processing", "shipped", "delivered"].includes(orderStatus)) {
       return {
         success: false,
@@ -69,7 +94,15 @@ export class PaymentService {
       };
     }
 
-    if (order.totalMinor <= 0) {
+    if (!dbOrder.is_total_settled) {
+      return {
+        success: false,
+        error: "Order total is not settled and cannot initiate payment.",
+        code: "UNSETTLED_DELIVERY",
+      };
+    }
+
+    if (dbOrder.total_minor <= 0) {
       return {
         success: false,
         error: "Invalid order amount. Payment amount must be greater than zero.",
@@ -77,16 +110,79 @@ export class PaymentService {
       };
     }
 
-    // 3. Currency Check
-    if (order.currency.toUpperCase() !== "NGN") {
+    // 5. Currency Check
+    if (dbOrder.currency.toUpperCase() !== "NGN") {
       return {
         success: false,
-        error: `Unsupported payment currency: ${order.currency}. Solure Scents transactions are processed in NGN.`,
+        error: `Unsupported payment currency: ${dbOrder.currency}. Solure Scents transactions are processed in NGN.`,
         code: "GATEWAY_ERROR",
       };
     }
 
-    // 4. Test Gateway Configuration Check
+    // 6. Persisted Order Items Check
+    const { data: dbItems, error: itemsError } = await dbClient
+      .from("order_items")
+      .select("id, variant_id, quantity, unit_price_minor, line_total_minor")
+      .eq("order_id", dbOrder.id);
+
+    if (itemsError || !dbItems || dbItems.length === 0) {
+      return {
+        success: false,
+        error: "Order items have not been persisted in database. Payment cannot be initiated.",
+        code: "GATEWAY_ERROR",
+      };
+    }
+
+    // 7. Server Validation of Prices and Item Totals
+    let calculatedItemsTotalMinor = 0;
+    for (const item of dbItems) {
+      if (item.quantity <= 0 || item.unit_price_minor <= 0) {
+        return {
+          success: false,
+          error: "Invalid item quantity or price found in persisted order items.",
+          code: "GATEWAY_ERROR",
+        };
+      }
+      calculatedItemsTotalMinor += (item.line_total_minor ?? (item.quantity * item.unit_price_minor));
+    }
+
+    if (calculatedItemsTotalMinor !== dbOrder.total_minor) {
+      return {
+        success: false,
+        error: `Persisted order item total (${calculatedItemsTotalMinor}) does not match order payable total (${dbOrder.total_minor}).`,
+        code: "GATEWAY_ERROR",
+      };
+    }
+
+    // 8. Inventory Reservation & Expiration Check
+    const now = new Date();
+    if (dbOrder.expires_at && new Date(dbOrder.expires_at) <= now) {
+      return {
+        success: false,
+        error: "Order checkout window has expired. Please restart checkout to reserve fresh inventory.",
+        code: "GATEWAY_ERROR",
+      };
+    }
+
+    const { data: activeReservations, error: resError } = await dbClient
+      .from("inventory_reservations")
+      .select("id, status, expires_at")
+      .eq("order_id", dbOrder.id);
+
+    if (!resError && activeReservations && activeReservations.length > 0) {
+      const hasValidReservation = activeReservations.some(
+        (r) => r.status === "active" && new Date(r.expires_at) > now,
+      );
+      if (!hasValidReservation) {
+        return {
+          success: false,
+          error: "Active inventory reservation has expired. Please restart checkout.",
+          code: "GATEWAY_ERROR",
+        };
+      }
+    }
+
+    // 9. Gateway Configuration Check
     if (!paystackGateway.isConfigured()) {
       return {
         success: false,
@@ -95,57 +191,69 @@ export class PaymentService {
       };
     }
 
-    // 5. Build dynamic return URL
+    // 10. Build dynamic return URL
     const baseUrl = origin?.replace(/\/+$/, "") || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-    const returnUrl = `${baseUrl}/checkout/payment/callback?order_id=${order.id}`;
+    const returnUrl = `${baseUrl}/checkout/payment/callback?order_id=${dbOrder.id}`;
 
-    // 6. Initiate with Paystack Gateway Adapter
+    // 11. Initiate with Paystack Gateway Adapter
     try {
       const initiation = await paystackGateway.initiate({
-        amountMinor: order.totalMinor,
+        amountMinor: dbOrder.total_minor,
         currency: "NGN",
-        customerEmail: order.customerEmail,
-        idempotencyKey: order.id,
-        orderId: order.id,
+        customerEmail: dbOrder.customer_email,
+        idempotencyKey: dbOrder.id,
+        orderId: dbOrder.id,
         returnUrl,
       });
 
-      // 7. Persist Pending Payment Attempt in Database
-      const dbClient = createPrivilegedSupabaseClient() ?? (await createServerSupabaseClient());
-      try {
-        await dbClient.rpc("initialize_order_payment", {
-          p_order_id: order.id,
-          p_provider: "paystack",
-          p_provider_reference: initiation.providerReference,
-          p_amount_minor: order.totalMinor,
-          p_currency: "NGN",
-          p_idempotency_key: `init_${initiation.providerReference}`,
-          p_customer_email: order.customerEmail,
-          p_metadata: {
-            orderNumber: order.orderNumber,
+      // 12. Persist Pending Payment Attempt in Database (Fail-Closed)
+      let persistSuccess = false;
+
+      const { error: rpcErr } = await dbClient.rpc("initialize_order_payment", {
+        p_order_id: dbOrder.id,
+        p_provider: "paystack",
+        p_provider_reference: initiation.providerReference,
+        p_amount_minor: dbOrder.total_minor,
+        p_currency: "NGN",
+        p_idempotency_key: `init_${initiation.providerReference}`,
+        p_customer_email: dbOrder.customer_email,
+        p_metadata: {
+          orderNumber: dbOrder.order_number,
+          test_mode: true,
+        } as unknown as Json,
+      });
+
+      if (!rpcErr) {
+        persistSuccess = true;
+      } else {
+        const { error: insertErr } = await dbClient.from("payments").insert({
+          order_id: dbOrder.id,
+          provider: "paystack",
+          provider_reference: initiation.providerReference,
+          idempotency_key: `init_${initiation.providerReference}`,
+          amount_minor: dbOrder.total_minor,
+          currency: "NGN",
+          status: "pending",
+          customer_email: dbOrder.customer_email,
+          metadata: {
+            orderNumber: dbOrder.order_number,
             test_mode: true,
           } as unknown as Json,
         });
-      } catch {
-        // Fallback: direct insert if RPC pending migration
-        try {
-          await dbClient.from("payments").insert({
-            order_id: order.id,
-            provider: "paystack",
-            provider_reference: initiation.providerReference,
-            idempotency_key: `init_${initiation.providerReference}`,
-            amount_minor: order.totalMinor,
-            currency: "NGN",
-            status: "pending",
-            customer_email: order.customerEmail,
-            metadata: {
-              orderNumber: order.orderNumber,
-              test_mode: true,
-            } as unknown as Json,
-          });
-        } catch (dbErr) {
-          console.warn("[PaymentService] Note on pending payment persistence:", dbErr);
+
+        if (!insertErr) {
+          persistSuccess = true;
+        } else {
+          console.error("[PaymentService] Failed to persist payment reference:", insertErr);
         }
+      }
+
+      if (!persistSuccess) {
+        return {
+          success: false,
+          error: "Failed to securely record payment transaction in database. Payment processing halted.",
+          code: "GATEWAY_ERROR",
+        };
       }
 
       return {

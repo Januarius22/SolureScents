@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   title: "Inventory Operations & Stock Control | Solure Scents Admin",
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function InventoryPage({
   searchParams,
 }: PageProps<"/admin/inventory">) {

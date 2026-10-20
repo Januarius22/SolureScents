@@ -30,6 +30,10 @@ export interface ConfirmationSessionPayload {
   tokenHash: string;
   issuedAt: number;
   expiresAt: number;
+  paymentStatus?: "captured" | "reconciliation_required" | "pending" | "failed";
+  paymentReference?: string;
+  amountMinor?: number;
+  paidAt?: string;
 }
 
 /**
@@ -103,7 +107,47 @@ export async function issueConfirmationAuthorization(
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: "/checkout/confirmation",
+    path: "/",
+    maxAge: 30 * 60, // 30 minutes
+  });
+}
+
+/**
+ * Updates the confirmation authorization cookie with authoritative payment settlement details.
+ * Ensures the client session immediately reflects captured or under-review status across all routes.
+ */
+export async function updateConfirmationPaymentStatus(
+  targetOrderId: string,
+  details: {
+    status: "captured" | "reconciliation_required" | "pending" | "failed";
+    reference?: string | null;
+    amountMinor?: number;
+    paidAt?: string | null;
+  },
+): Promise<void> {
+  const existing = await getActiveConfirmationAuth(targetOrderId);
+  const now = Date.now();
+
+  const payload: ConfirmationSessionPayload = {
+    orderId: existing?.orderId || targetOrderId,
+    orderNumber: existing?.orderNumber || targetOrderId,
+    tokenHash: existing?.tokenHash || "",
+    issuedAt: existing?.issuedAt || now,
+    expiresAt: now + CONFIRMATION_TTL_MS,
+    paymentStatus: details.status,
+    paymentReference: details.reference || existing?.paymentReference,
+    amountMinor: details.amountMinor ?? existing?.amountMinor,
+    paidAt: details.paidAt || existing?.paidAt || new Date().toISOString(),
+  };
+
+  const signed = signConfirmationPayload(payload);
+  const cookieStore = await cookies();
+
+  cookieStore.set(CONFIRMATION_COOKIE_NAME, signed, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
     maxAge: 30 * 60, // 30 minutes
   });
 }

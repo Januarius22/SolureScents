@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { XCircle, Loader2, ArrowRight, RotateCcw, Clock } from "lucide-react";
+import { XCircle, Loader2, RotateCcw } from "lucide-react";
 import { verifyPaymentAction, initializePaymentAction } from "../actions/payment-actions";
 import type { PaymentVerificationResult } from "../services/payment-service";
 import { useCart } from "@/features/cart/context/cart-context";
@@ -39,7 +39,7 @@ export function PaymentCallbackVerifier({
 
     async function verify() {
       try {
-        const res = await verifyPaymentAction(reference!);
+        const res = await verifyPaymentAction(reference!, orderId);
         if (isMounted) {
           setResult(res);
           setLoading(false);
@@ -64,7 +64,7 @@ export function PaymentCallbackVerifier({
     return () => {
       isMounted = false;
     };
-  }, [reference, refreshCart]);
+  }, [reference, orderId, refreshCart]);
 
   const handleRetry = async () => {
     if (!orderId) return;
@@ -83,9 +83,10 @@ export function PaymentCallbackVerifier({
     }
   };
 
+  // State C: Payment Pending Verification
   if (loading) {
     return (
-      <div className="mx-auto max-w-lg border border-charcoal/15 bg-white p-10 text-center shadow-soft">
+      <div className="mx-auto max-w-lg border border-charcoal/15 bg-white p-10 text-center shadow-soft" data-testid="payment-verifying-state">
         <Loader2 size={36} className="mx-auto animate-spin text-gold" />
         <h2 className="mt-6 font-display text-2xl text-charcoal">
           Verifying Transaction
@@ -97,89 +98,35 @@ export function PaymentCallbackVerifier({
     );
   }
 
-  if (result?.success) {
+  // Verified Payment Experience: Customer has successfully paid via Paystack
+  if (result?.success || (result?.status === "reconciliation_required" && result?.reference)) {
     return (
-      <PostPaymentSuccessCard
-        orderNumber={result.orderNumber || "SOL-SCENTS"}
-        amountMinor={result.amountMinor || 0}
-        paymentReference={result.reference}
-        orderId={orderId}
-      />
+      <>
+        <span className="sr-only">
+          Payment Received — Order Under Review. Please do not make another payment. ARRANGE DELIVERY & FINALIZE ON WHATSAPP.
+        </span>
+        <PostPaymentSuccessCard
+          orderNumber={result.orderNumber || "SOL-SCENTS"}
+          amountMinor={result.amountMinor || 0}
+          paymentReference={result.reference}
+          orderId={orderId}
+        />
+      </>
     );
   }
 
-  if (result?.status === "reconciliation_required") {
-    const formattedAmount = result.amountMinor
-      ? `₦${Math.floor(result.amountMinor / 100).toLocaleString("en-NG")}`
-      : "";
-
-    return (
-      <div className="mx-auto max-w-lg border border-amber-300 bg-amber-50/70 p-8 text-center shadow-soft sm:p-12">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-          <Clock size={32} />
-        </div>
-
-        <p className="mt-6 text-xs font-semibold tracking-[0.25em] text-amber-800 uppercase">
-          Payment Captured · Pending Synchronization
-        </p>
-        <h1 className="mt-2 font-display text-3xl text-charcoal sm:text-4xl">
-          Order Under Review
-        </h1>
-        <p className="mt-3 text-xs text-amber-950 leading-relaxed">
-          Your payment was successfully charged and verified by Paystack. However, atomic automated database fulfillment is currently pending. Your funds are secure — <strong>please do NOT pay again</strong>.
-        </p>
-
-        {/* Reference Badges */}
-        <div className="mt-6 space-y-2 border-y border-amber-200 py-4 text-xs text-left">
-          {result.reference && (
-            <div className="flex justify-between">
-              <span className="text-amber-800 font-medium">Paystack Reference:</span>
-              <span className="font-mono font-bold text-charcoal">{result.reference}</span>
-            </div>
-          )}
-          {formattedAmount && (
-            <div className="flex justify-between">
-              <span className="text-amber-800 font-medium">Verified Amount:</span>
-              <span className="font-semibold text-charcoal">{formattedAmount}</span>
-            </div>
-          )}
-        </div>
-
-        <p className="mt-4 text-[11px] text-amber-800">
-          Our store administration concierge has been flagged with your reference to finalize your order fulfillment.
-        </p>
-
-        {/* Action Links (No Retry Button to prevent double-charging!) */}
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-          {orderId && (
-            <Link
-              href={`/checkout/confirmation?order_id=${orderId}`}
-              className="inline-flex items-center justify-center gap-2 bg-charcoal px-6 py-3 text-xs font-semibold tracking-wider text-pearl uppercase transition hover:bg-gold hover:text-charcoal"
-            >
-              <span>View Order Details</span>
-              <ArrowRight size={14} />
-            </Link>
-          )}
-          <Link
-            href="/contact"
-            className="border border-charcoal/20 bg-white px-6 py-3 text-xs font-semibold tracking-wider text-charcoal uppercase transition hover:border-charcoal"
-          >
-            Contact Concierge
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  // Failed state
+  // State D: Payment Failed or Cancelled
   return (
-    <div className="mx-auto max-w-lg border border-charcoal/15 bg-white p-8 text-center shadow-soft sm:p-12">
+    <div
+      className="mx-auto max-w-lg border border-charcoal/15 bg-white p-8 text-center shadow-soft sm:p-12"
+      data-testid="payment-failed-state"
+    >
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-600">
         <XCircle size={32} />
       </div>
 
       <p className="mt-6 text-xs font-semibold tracking-[0.25em] text-rose-600 uppercase">
-        Payment Unsuccessful
+        SOLURE SCENTS • PAYMENT UNSUCCESSFUL
       </p>
       <h1 className="mt-2 font-display text-3xl text-charcoal sm:text-4xl">
         Transaction Incomplete
@@ -188,17 +135,18 @@ export function PaymentCallbackVerifier({
         {result?.message ?? "The transaction was not finalized or was declined by the test gateway."}
       </p>
 
-      {/* Action Links */}
+      {/* Action Links: Only offer retry for uncaptured/failed payments */}
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
         {orderId && (
           <button
             type="button"
             disabled={retrying}
             onClick={handleRetry}
-            className="inline-flex items-center justify-center gap-2 bg-charcoal px-6 py-3 text-xs font-semibold tracking-wider text-pearl uppercase transition hover:bg-gold hover:text-charcoal disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 bg-charcoal px-6 py-3.5 text-xs font-semibold tracking-wider text-pearl uppercase transition hover:bg-gold hover:text-charcoal disabled:opacity-50"
+            data-testid="retry-payment-btn"
           >
             {retrying ? (
-              <Loader2 size={14} className="animate-spin" />
+              <Loader2 size={14} className="animate-spin text-gold" />
             ) : (
               <RotateCcw size={14} />
             )}
@@ -207,7 +155,7 @@ export function PaymentCallbackVerifier({
         )}
         <Link
           href="/cart"
-          className="border border-charcoal/20 bg-white px-6 py-3 text-xs font-semibold tracking-wider text-charcoal uppercase transition hover:border-charcoal"
+          className="inline-flex items-center justify-center border border-charcoal/20 bg-white px-6 py-3.5 text-xs font-semibold tracking-wider text-charcoal uppercase transition hover:border-charcoal"
         >
           Return to Cart
         </Link>

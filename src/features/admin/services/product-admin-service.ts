@@ -157,11 +157,11 @@ async function resolveOrCreateDefaultLocation(
   const { data: created, error } = await db
     .from("inventory_locations")
     .insert({
-      name: "Solure Lagos Atelier",
-      code: "LOS-MAIN",
+      name: "Solure Abuja Atelier",
+      code: "ABJ-MAIN",
       address: {
-        city: "Lagos",
-        state: "Lagos State",
+        city: "Abuja",
+        state: "Federal Capital Territory",
         country: "Nigeria",
       },
       is_active: true,

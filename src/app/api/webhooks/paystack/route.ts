@@ -5,7 +5,7 @@ import {
   finalizeFailedPayment,
 } from "@/features/payments/services/payment-fulfillment";
 import { clearPurchasedCartItems } from "@/features/cart/services/cart-service";
-import { createPrivilegedSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
+import { createPrivilegedSupabaseClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +47,15 @@ export async function POST(req: NextRequest) {
     const status = data.status as string;
 
     // 3. Log event idempotency if payment_webhooks exists
-    const dbClient = createPrivilegedSupabaseClient() ?? (await createServerSupabaseClient());
+    const dbClient = createPrivilegedSupabaseClient();
+    if (!dbClient) {
+      console.error(
+        "[PaystackWebhook] FAIL-CLOSED: SUPABASE_SERVICE_ROLE_KEY is not configured on the server. Webhook cannot execute privileged database writes.",
+      );
+      return new NextResponse("Server configuration required - webhook retry requested", {
+        status: 500,
+      });
+    }
     try {
       const eventId = String(event.id || `${eventType}_${reference}_${Date.now()}`);
       await dbClient.from("payment_webhooks").insert({

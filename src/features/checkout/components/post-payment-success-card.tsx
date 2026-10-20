@@ -1,8 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Clock, ShieldCheck, ArrowRight } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  ShoppingBag,
+  ArrowRight,
+  MessageCircle,
+} from "lucide-react";
+import type { PreparedOrder } from "../types";
 import { WhatsAppDeliveryButton } from "./whatsapp-delivery-button";
+import { DownloadReceiptButton } from "./download-receipt-button";
+import { OrderDetailsSummary } from "./order-details-summary";
 
 interface PostPaymentSuccessCardProps {
   orderNumber: string;
@@ -10,6 +22,7 @@ interface PostPaymentSuccessCardProps {
   currency?: string;
   orderId?: string | null;
   paymentReference?: string | null;
+  order?: PreparedOrder | null;
   className?: string;
 }
 
@@ -23,112 +36,175 @@ export function PostPaymentSuccessCard({
   amountMinor,
   orderId,
   paymentReference,
+  order,
   className = "",
 }: PostPaymentSuccessCardProps) {
+  const [showOrderDetails, setShowOrderDetails] = useState(false);
+
   return (
     <div
-      className={`border border-charcoal/15 bg-white p-8 text-center shadow-soft sm:p-12 ${className}`}
+      className={`mx-auto max-w-lg border border-charcoal/15 bg-white p-5 sm:p-8 text-center shadow-soft ${className}`}
       data-testid="post-payment-success-card"
     >
-      {/* 1. Payment Successful Confirmation Heading */}
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-8 ring-emerald-50/50">
-        <CheckCircle2 size={34} />
+      {/* 1. Header & Status */}
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-4 ring-emerald-50/60">
+        <CheckCircle2 size={28} />
       </div>
 
-      <p className="mt-6 text-xs font-semibold tracking-[0.25em] text-gold uppercase">
-        Payment Successful
+      <p className="mt-4 text-[11px] font-semibold tracking-[0.2em] text-gold uppercase" data-testid="confirmation-eyebrow">
+        SOLURE SCENTS • ORDER CONFIRMATION
       </p>
 
-      <h1 className="mt-2 font-display text-3xl text-charcoal sm:text-4xl">
-        Your Scent Journey Has Begun
+      <h1 className="mt-1 font-display text-2xl sm:text-3xl text-charcoal" data-testid="confirmation-heading">
+        Your Order Is Confirmed
       </h1>
+      <h2 className="sr-only">Payment Successful — Your Payment Has Been Received</h2>
 
-      <p className="mx-auto mt-3 max-w-lg text-sm text-charcoal/80 font-medium leading-relaxed">
-        Your perfume order has been confirmed!
+      <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-0.5 text-xs font-semibold text-emerald-800">
+        <CheckCircle2 size={12} className="text-emerald-600" />
+        <span data-testid="payment-status-badge">PAID — PAYMENT CONFIRMED</span>
+      </div>
+
+      <p className="mx-auto mt-2 max-w-sm text-xs text-muted leading-relaxed">
+        Thank you for choosing Solure Scents. Your perfume order has been confirmed!
       </p>
 
-      {/* 2. Actual Order Number & Amount Paid & 3. Delivery Status */}
-      <div className="mx-auto mt-6 max-w-md border-y border-charcoal/10 py-4 text-xs text-left space-y-2.5">
-        <div className="flex items-center justify-between">
-          <span className="text-muted">Order Number:</span>
-          <span className="font-mono text-sm font-bold tracking-wider text-charcoal" data-testid="order-number-display">
-            {orderNumber}
-          </span>
+      {/* 2. Clean, Compact Order Summary Strip */}
+      <div className="mx-auto mt-4 rounded-none border border-charcoal/10 bg-pearl/40 p-3 sm:p-4 text-xs text-left">
+        <div className="grid grid-cols-2 gap-2 sm:gap-4">
+          <div>
+            <span className="text-[10px] text-muted uppercase tracking-wider block">Order Number</span>
+            <span className="font-mono text-xs sm:text-sm font-bold text-charcoal tracking-wide" data-testid="order-number-display">
+              {orderNumber}
+            </span>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] text-muted uppercase tracking-wider block">Amount Paid</span>
+            <span className="font-mono text-xs sm:text-sm font-bold text-charcoal" data-testid="amount-paid-display">
+              {formatMoney(amountMinor)}
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <span className="text-muted">Amount Paid (Perfumes Only):</span>
-          <span className="font-mono text-sm font-bold text-charcoal" data-testid="amount-paid-display">
-            {formatMoney(amountMinor)}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <span className="text-muted">Payment Verification:</span>
-          <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
-            <ShieldCheck size={14} className="text-emerald-600" />
-            <span>Verified via Paystack</span>
+        <div className="mt-2.5 pt-2 border-t border-charcoal/10 flex flex-wrap items-center justify-between gap-1 text-[11px]">
+          <span className="text-muted">Delivery:</span>
+          <span
+            className="inline-flex items-center gap-1 font-semibold text-amber-800"
+            data-testid="delivery-status-badge"
+          >
+            <Clock size={11} className="text-amber-700" />
+            <span>Delivery Arrangement Pending</span>
           </span>
         </div>
 
         {paymentReference && (
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-muted">Transaction Ref:</span>
-            <span className="font-mono text-muted/90">{paymentReference}</span>
+          <div className="mt-1 flex items-center justify-between text-[10px] text-muted">
+            <span>Payment Ref:</span>
+            <span className="font-mono truncate max-w-[180px] sm:max-w-none">{paymentReference}</span>
           </div>
         )}
+      </div>
 
-        {/* 3. Delivery Arrangement Pending Status Badge */}
-        <div className="flex items-center justify-between border-t border-charcoal/10 pt-2.5">
-          <span className="text-muted">Delivery Status:</span>
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-amber-900 uppercase"
-            data-testid="delivery-status-badge"
-          >
-            <Clock size={12} className="text-amber-700" />
-            <span>Delivery Arrangement Pending</span>
-          </span>
+      {/* 3. Streamlined WhatsApp Delivery Box (Clean, Direct & Mobile-Optimized) */}
+      <div className="mx-auto mt-4 rounded-none border border-[#25D366]/30 bg-[#25D366]/5 p-4 text-left">
+        <div className="flex items-center gap-1.5">
+          <MessageCircle size={15} className="text-[#25D366] shrink-0" />
+          <h2 className="font-display text-sm font-semibold text-charcoal">
+            Arrange Delivery on WhatsApp
+          </h2>
         </div>
+
+        <p className="mt-1 text-xs text-charcoal/80 leading-relaxed">
+          To complete your delivery and receive waybill details, please send our team a WhatsApp message using the button below.
+        </p>
+
+        {/* 3 Simple Compact Steps */}
+        <div className="mt-2.5 grid grid-cols-3 gap-1 text-center text-[10px]">
+          <div className="border border-[#25D366]/20 bg-white/90 p-1.5 rounded">
+            <span className="font-bold text-[#128C7E] block text-[9px]">01</span>
+            <span className="text-charcoal/80">Open WhatsApp</span>
+          </div>
+          <div className="border border-[#25D366]/20 bg-white/90 p-1.5 rounded">
+            <span className="font-bold text-[#128C7E] block text-[9px]">02</span>
+            <span className="text-charcoal/80">Send Order ID</span>
+          </div>
+          <div className="border border-[#25D366]/20 bg-white/90 p-1.5 rounded">
+            <span className="font-bold text-[#128C7E] block text-[9px]">03</span>
+            <span className="text-charcoal/80">Get Waybill</span>
+          </div>
+        </div>
+
+        {/* Primary CTA Button */}
+        <div className="mt-3">
+          <WhatsAppDeliveryButton
+            orderNumber={orderNumber}
+            paymentReference={paymentReference}
+            label="ARRANGE DELIVERY ON WHATSAPP"
+          />
+        </div>
+
+        <p className="mt-2 text-center text-[10px] text-muted">
+          * Delivery fee confirmed separately with concierge.
+        </p>
       </div>
 
-      {/* Main Instruction Callout */}
-      <div className="mx-auto mt-6 max-w-md rounded-none border border-gold/40 bg-champagne/15 p-5 text-left text-xs leading-relaxed text-charcoal/90">
-        <p className="font-semibold text-charcoal text-[13px]">
-          Next Step: Confirm Dispatch with Our Atelier
-        </p>
-        <p className="mt-1.5 text-muted leading-relaxed">
-          To arrange delivery, please send our team a WhatsApp message using the button below. Your order number has already been included in the message for your convenience.
-        </p>
-        <p className="mt-2 text-[11px] text-muted italic">
-          Your payment covers your perfume purchase only. Delivery fees, where applicable, will be confirmed separately by our team after your order is placed.
-        </p>
-      </div>
-
-      {/* 4. Prominent Primary CTA: Arrange Delivery on WhatsApp */}
-      <div className="mx-auto mt-6 max-w-md">
-        <WhatsAppDeliveryButton orderNumber={orderNumber} />
-      </div>
-
-      {/* 5. Secondary Action: Continue Shopping */}
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-xs">
+      {/* 4. Secondary Action Links */}
+      <div className="mx-auto mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
         {orderId && (
-          <Link
-            href={`/checkout/confirmation?order_id=${encodeURIComponent(orderId)}`}
-            className="inline-flex items-center gap-1.5 text-charcoal font-medium transition hover:text-gold hover:underline"
+          <button
+            type="button"
+            onClick={() => setShowOrderDetails(!showOrderDetails)}
+            className="inline-flex items-center gap-1 border border-charcoal/20 bg-white px-3 py-2 text-[11px] font-semibold text-charcoal uppercase tracking-wider transition hover:border-gold hover:text-gold"
+            data-testid="view-order-details-btn"
           >
-            <span>View Full Order Details</span>
-            <ArrowRight size={13} />
-          </Link>
+            <ShoppingBag size={12} className="text-gold" />
+            <span>{showOrderDetails ? "Hide Details" : "View Details"}</span>
+            {showOrderDetails ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+          </button>
         )}
-        <span className="text-charcoal/20">|</span>
+
+        {orderId && (
+          <DownloadReceiptButton
+            orderId={orderId}
+            orderNumber={orderNumber}
+          />
+        )}
+
         <Link
           href="/shop"
-          className="text-muted transition hover:text-charcoal hover:underline"
+          className="inline-flex items-center gap-1 px-3 py-2 text-[11px] font-semibold text-muted transition hover:text-charcoal hover:underline"
           data-testid="continue-shopping-link"
         >
-          Continue Shopping
+          <span>Continue Shopping</span>
+          <ArrowRight size={11} />
         </Link>
       </div>
+
+      {/* 5. Expandable Order Breakdown */}
+      {showOrderDetails && order && (
+        <div className="mt-5 text-left transition-all">
+          <OrderDetailsSummary
+            order={order}
+            paymentStatus="Verified via Paystack"
+            paymentReference={paymentReference}
+            showReceiptDownload={false}
+            showWhatsAppCta={false}
+            isExpandable={false}
+          />
+        </div>
+      )}
+
+      {showOrderDetails && !order && orderId && (
+        <div className="mt-4 text-xs text-muted">
+          <Link
+            href={`/checkout/confirmation?order_id=${encodeURIComponent(orderId)}&view=details`}
+            className="inline-flex items-center gap-1 font-semibold text-charcoal hover:text-gold hover:underline"
+          >
+            <span>Open Dedicated Order Details</span>
+            <ArrowRight size={11} />
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

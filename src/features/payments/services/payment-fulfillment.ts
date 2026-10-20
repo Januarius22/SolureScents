@@ -1,4 +1,4 @@
-import { createServerSupabaseClient, createPrivilegedSupabaseClient } from "@/lib/supabase/server";
+import { createPrivilegedSupabaseClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
 export interface PaymentSuccessPayload {
@@ -41,7 +41,22 @@ export interface PaymentFulfillmentResult {
 export async function finalizeSuccessfulPayment(
   payload: PaymentSuccessPayload,
 ): Promise<PaymentFulfillmentResult> {
-  const dbClient = createPrivilegedSupabaseClient() ?? (await createServerSupabaseClient());
+  const dbClient = createPrivilegedSupabaseClient();
+  if (!dbClient) {
+    console.error(
+      "[PaymentFulfillment] FAIL-CLOSED: Privileged database credentials (SUPABASE_SERVICE_ROLE_KEY) are not configured on the server. Privileged payment finalization cannot proceed.",
+    );
+    return {
+      success: false,
+      operationalStatus: "reconciliation_required",
+      requiresReconciliation: true,
+      paymentReference: payload.reference,
+      amountMinor: payload.amountMinor,
+      currency: payload.currency,
+      error:
+        "Privileged server credentials (SUPABASE_SERVICE_ROLE_KEY) are not configured. Payment captured by Paystack; flagged for administrative reconciliation.",
+    };
+  }
 
   // 1. Strict Validation of Amount & Currency before touching database
   if (!Number.isInteger(payload.amountMinor) || payload.amountMinor <= 0) {
@@ -188,7 +203,13 @@ export async function finalizeFailedPayment(
   failureCode?: string,
   failureMessage?: string,
 ): Promise<{ success: boolean; orderId?: string }> {
-  const dbClient = createPrivilegedSupabaseClient() ?? (await createServerSupabaseClient());
+  const dbClient = createPrivilegedSupabaseClient();
+  if (!dbClient) {
+    console.error(
+      "[PaymentFulfillment] FAIL-CLOSED: SUPABASE_SERVICE_ROLE_KEY missing for failed payment recording.",
+    );
+    return { success: false };
+  }
 
   try {
     const { data: rpcPayment, error: rpcErr } = await dbClient.rpc(

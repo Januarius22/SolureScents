@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   title: "Order Fulfillment & Dispatch | Solure Scents Admin",
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const statuses = [
   "pending",
   "confirmed",

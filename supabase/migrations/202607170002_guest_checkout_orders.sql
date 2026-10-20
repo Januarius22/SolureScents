@@ -31,7 +31,7 @@ alter table public.orders add column if not exists tracking_url text;
 alter table public.orders add column if not exists delivery_status text not null default 'pending';
 alter table public.orders drop constraint if exists orders_delivery_status_check;
 alter table public.orders add constraint orders_delivery_status_check 
-  check (delivery_status in ('configured', 'pending', 'free'));
+  check (delivery_status in ('configured', 'pending', 'free', 'arranged_separately'));
 
 alter table public.orders add column if not exists is_total_settled boolean not null default false;
 
@@ -120,8 +120,13 @@ begin
     raise exception 'invalid guest access token hash' using errcode = '42501';
   end if;
 
-  -- Validate items array
-  if p_items is null or jsonb_array_length(p_items) = 0 then
+  -- Validate currency (strict NGN support across platform)
+  if coalesce(p_currency, '') <> 'NGN' then
+    raise exception 'Unsupported order currency: %. Solure Scents processes NGN only.', p_currency using errcode = '22000';
+  end if;
+
+  -- Validate items array structure
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
     raise exception 'order must contain at least one fragrance item' using errcode = '22000';
   end if;
 
@@ -130,11 +135,21 @@ begin
     raise exception 'invalid shipping address structure' using errcode = '22023';
   end if;
 
+  -- Validate that every item in the JSON array has valid variant_id and positive quantity
+  if exists (
+    select 1 
+    from jsonb_to_recordset(p_items) as x(variant_id uuid, quantity integer) 
+    where x.variant_id is null or x.quantity is null or x.quantity < 1
+  ) then
+    raise exception 'every item must specify a valid variant_id and positive integer quantity' using errcode = '22000';
+  end if;
+
   -- Recompute subtotal strictly against live database prices (aggregating duplicate variants)
   for v_item in 
     select variant_id, sum(quantity)::integer as quantity 
     from jsonb_to_recordset(p_items) as x(variant_id uuid, quantity integer)
     group by variant_id
+    order by variant_id asc
   loop
     if v_item.quantity < 1 or v_item.quantity > 99 then
       raise exception 'item quantity must be between 1 and 99' using errcode = '22003';
@@ -149,17 +164,34 @@ begin
       and p.status = 'active';
 
     if not found then
-      raise exception 'fragrance variant is unavailable' using errcode = 'P0002';
+      raise exception 'fragrance variant % is unavailable or inactive', v_item.variant_id using errcode = 'P0002';
+    end if;
+
+    if v_variant.currency <> 'NGN' then
+      raise exception 'fragrance variant % is not priced in NGN', v_item.variant_id using errcode = '22000';
+    end if;
+
+    if v_variant.price_minor <= 0 then
+      raise exception 'fragrance variant % has invalid non-positive price', v_item.variant_id using errcode = '22000';
     end if;
 
     v_line_total := v_variant.price_minor * v_item.quantity;
     v_subtotal_minor := v_subtotal_minor + v_line_total;
   end loop;
 
-  -- Effective shipping: if pending, shipping is recorded as 0 minor with is_total_settled = false
-  v_effective_shipping := case when p_delivery_status = 'pending' then 0 else coalesce(p_shipping_minor, 0) end;
+  if v_subtotal_minor <= 0 then
+    raise exception 'calculated order subtotal must be greater than zero' using errcode = '22000';
+  end if;
 
-  -- Create pending order record (remains unpaid/pending until Sprint 3 gateway capture)
+  -- Abuja Nationwide Delivery Architecture:
+  -- Delivery fees are arranged separately via WhatsApp after payment.
+  -- Online transaction charges strictly 0 shipping so totalMinor represents perfume purchase only.
+  v_effective_shipping := case 
+    when p_delivery_status in ('pending', 'arranged_separately', 'free') then 0 
+    else coalesce(p_shipping_minor, 0) 
+  end;
+
+  -- Create pending order record (remains unpaid/pending until gateway capture)
   insert into public.orders (
     profile_id,
     guest_session_hash,
@@ -185,7 +217,7 @@ begin
     p_guest_access_token_hash,
     'pending',
     'unfulfilled',
-    coalesce(p_currency, 'NGN'),
+    'NGN',
     v_subtotal_minor,
     0,
     v_effective_shipping,
@@ -206,6 +238,7 @@ begin
     select variant_id, sum(quantity)::integer as quantity 
     from jsonb_to_recordset(p_items) as x(variant_id uuid, quantity integer)
     group by variant_id
+    order by variant_id asc
   loop
     select v.* into v_variant
     from public.product_variants v
@@ -251,38 +284,214 @@ security definer
 set search_path = ''
 as $$
 declare
+  v_order public.orders;
   v_item record;
   v_level public.inventory_levels;
+  v_loc public.inventory_locations;
+  v_existing_res public.inventory_reservations;
+  v_stale_res record;
   v_count integer := 0;
+  v_ttl interval;
+  v_new_expiry timestamptz;
+  v_required_quantity integer;
 begin
+  -- 1. Validate target order
+  select * into v_order from public.orders where id = p_order_id for update;
+  if v_order.id is null then
+    raise exception 'Order % not found', p_order_id using errcode = 'P0002';
+  end if;
+
+  if v_order.status in ('confirmed', 'processing', 'shipped', 'delivered') then
+    raise exception 'Order % is already confirmed/paid', p_order_id using errcode = '23505';
+  end if;
+
+  if v_order.status = 'cancelled' then
+    raise exception 'Cannot reserve inventory for cancelled order %', p_order_id using errcode = '22000';
+  end if;
+
+  if not exists (select 1 from public.order_items where order_id = p_order_id and variant_id is not null) then
+    raise exception 'Order % has no line items to reserve', p_order_id using errcode = '22000';
+  end if;
+
+  v_ttl := (greatest(1, coalesce(p_ttl_minutes, 15)) || ' minutes')::interval;
+  v_new_expiry := now() + v_ttl;
+
+  -- 2. Deterministic Row Locking & Atomic Stale Reservation Release:
+  -- Lock and release any expired active reservations belonging to this order first,
+  -- decrementing reserved counters accurately to prevent stock leaks or double expiry deductions.
+  for v_stale_res in
+    select r.id, r.inventory_level_id, r.quantity
+    from public.inventory_reservations r
+    where r.order_id = p_order_id
+      and r.status = 'active'
+      and r.expires_at <= now()
+    order by r.inventory_level_id, r.id
+    for update of r
+  loop
+    select * into v_level
+    from public.inventory_levels
+    where id = v_stale_res.inventory_level_id
+    for update;
+
+    if v_level.id is not null then
+      update public.inventory_levels
+      set reserved = greatest(0, reserved - v_stale_res.quantity),
+          updated_at = now()
+      where id = v_level.id;
+    end if;
+
+    update public.inventory_reservations
+    set status = 'expired',
+        released_at = now(),
+        updated_at = now()
+    where id = v_stale_res.id;
+  end loop;
+
+  -- 3. Process each variant in ascending order of variant_id to prevent deadlocks across concurrent checkouts
   for v_item in 
     select variant_id, sum(quantity)::integer as quantity 
     from public.order_items 
     where order_id = p_order_id and variant_id is not null
     group by variant_id
+    order by variant_id asc
   loop
-    -- Lock inventory level row to prevent race conditions during concurrent checkouts
-    select * into v_level
-    from public.inventory_levels
-    where variant_id = v_item.variant_id
-    order by on_hand desc
+    v_required_quantity := v_item.quantity;
+    if v_required_quantity < 1 then
+      raise exception 'Invalid quantity % for variant %', v_required_quantity, v_item.variant_id using errcode = '22003';
+    end if;
+
+    -- Also release any expired active reservations for this variant across unconfirmed orders
+    -- to prevent stale expired reservations from blocking available stock for current shoppers
+    for v_stale_res in
+      select r.id, r.inventory_level_id, r.quantity
+      from public.inventory_reservations r
+      left join public.orders o on o.id = r.order_id
+      where r.variant_id = v_item.variant_id
+        and r.status = 'active'
+        and r.expires_at <= now()
+        and (o.status is null or o.status not in ('confirmed', 'processing', 'shipped', 'delivered'))
+      order by r.inventory_level_id, r.id
+      for update of r
+    loop
+      select * into v_level
+      from public.inventory_levels
+      where id = v_stale_res.inventory_level_id
+      for update;
+
+      if v_level.id is not null then
+        update public.inventory_levels
+        set reserved = greatest(0, reserved - v_stale_res.quantity),
+            updated_at = now()
+        where id = v_level.id;
+      end if;
+
+      update public.inventory_reservations
+      set status = 'expired',
+          released_at = now(),
+          updated_at = now()
+      where id = v_stale_res.id;
+    end loop;
+
+    -- Check if active unexpired reservation already exists for this order and variant
+    select * into v_existing_res
+    from public.inventory_reservations
+    where order_id = p_order_id
+      and variant_id = v_item.variant_id
+      and status = 'active'
+      and expires_at > now()
+    order by id asc
     limit 1
     for update;
 
-    if not found then
-      raise exception 'no inventory level configured for variant %', v_item.variant_id using errcode = 'P0002';
+    if v_existing_res.id is not null then
+      -- Verify the linked inventory level and location
+      select * into v_level
+      from public.inventory_levels
+      where id = v_existing_res.inventory_level_id
+      for update;
+
+      if v_level.id is null then
+        raise exception 'Reserved inventory level % not found', v_existing_res.inventory_level_id using errcode = 'P0002';
+      end if;
+
+      select * into v_loc
+      from public.inventory_locations
+      where id = v_level.location_id and is_active = true;
+
+      if v_loc.id is null then
+        raise exception 'Inventory location % is inactive or missing', v_level.location_id using errcode = '22000';
+      end if;
+
+      -- If existing active reservation quantity matches requirement, idempotently extend TTL
+      if v_existing_res.quantity = v_required_quantity then
+        update public.inventory_reservations
+        set expires_at = v_new_expiry,
+            updated_at = now()
+        where id = v_existing_res.id;
+
+        v_count := v_count + 1;
+        continue;
+      else
+        -- Quantity difference: adjust reserved counter by delta
+        declare
+          v_delta integer := v_required_quantity - v_existing_res.quantity;
+        begin
+          if v_delta > 0 and (v_level.on_hand - v_level.reserved) < v_delta then
+            raise exception 'Insufficient additional stock for variant % (available: %, needed: %)',
+              v_item.variant_id, (v_level.on_hand - v_level.reserved), v_delta using errcode = '22000';
+          end if;
+
+          update public.inventory_levels
+          set reserved = reserved + v_delta,
+              updated_at = now()
+          where id = v_level.id;
+
+          update public.inventory_reservations
+          set quantity = v_required_quantity,
+              expires_at = v_new_expiry,
+              updated_at = now()
+          where id = v_existing_res.id;
+
+          v_count := v_count + 1;
+          continue;
+        end;
+      end if;
     end if;
 
-    if (v_level.on_hand - v_level.reserved) < v_item.quantity then
-      raise exception 'insufficient inventory for variant % (available: %, requested: %)', 
-        v_item.variant_id, (v_level.on_hand - v_level.reserved), v_item.quantity using errcode = '22000';
+    -- Lock candidate inventory level for this variant (deterministic: highest on_hand, then lowest id)
+    select * into v_level
+    from public.inventory_levels
+    where variant_id = v_item.variant_id
+    order by on_hand desc, id asc
+    limit 1
+    for update;
+
+    if v_level.id is null then
+      raise exception 'No inventory level configured for variant %', v_item.variant_id using errcode = 'P0002';
     end if;
 
+    -- Verify active location exists
+    select * into v_loc
+    from public.inventory_locations
+    where id = v_level.location_id and is_active = true;
+
+    if v_loc.id is null then
+      raise exception 'Inventory location % for variant % is inactive or missing', v_level.location_id, v_item.variant_id using errcode = '22000';
+    end if;
+
+    -- Check available stock (on_hand - reserved >= requested)
+    if (v_level.on_hand - v_level.reserved) < v_required_quantity then
+      raise exception 'Insufficient inventory for variant % at location % (available: %, requested: %)', 
+        v_item.variant_id, v_loc.name, (v_level.on_hand - v_level.reserved), v_required_quantity using errcode = '22000';
+    end if;
+
+    -- Atomically increment reserved counter
     update public.inventory_levels
-    set reserved = reserved + v_item.quantity,
+    set reserved = reserved + v_required_quantity,
         updated_at = now()
     where id = v_level.id;
 
+    -- Insert active reservation record
     insert into public.inventory_reservations (
       order_id,
       inventory_level_id,
@@ -294,9 +503,9 @@ begin
       p_order_id,
       v_level.id,
       v_item.variant_id,
-      v_item.quantity,
+      v_required_quantity,
       'active',
-      now() + (p_ttl_minutes || ' minutes')::interval
+      v_new_expiry
     );
 
     v_count := v_count + 1;
@@ -316,18 +525,27 @@ set search_path = ''
 as $$
 declare
   v_res record;
+  v_level public.inventory_levels;
   v_released integer := 0;
 begin
   for v_res in 
-    select id, inventory_level_id, quantity 
-    from public.inventory_reservations 
-    where order_id = p_order_id and status = 'active'
-    for update
+    select r.id, r.inventory_level_id, r.quantity 
+    from public.inventory_reservations r
+    where r.order_id = p_order_id and r.status = 'active'
+    order by r.inventory_level_id, r.id
+    for update of r
   loop
-    update public.inventory_levels
-    set reserved = greatest(0, reserved - v_res.quantity),
-        updated_at = now()
-    where id = v_res.inventory_level_id;
+    select * into v_level
+    from public.inventory_levels
+    where id = v_res.inventory_level_id
+    for update;
+
+    if v_level.id is not null then
+      update public.inventory_levels
+      set reserved = greatest(0, reserved - v_res.quantity),
+          updated_at = now()
+      where id = v_level.id;
+    end if;
 
     update public.inventory_reservations
     set status = 'released',
@@ -350,18 +568,34 @@ set search_path = ''
 as $$
 declare
   v_res record;
+  v_level public.inventory_levels;
   v_released integer := 0;
 begin
+  -- Safe periodic release: lock expired active reservations deterministically.
+  -- CRITICAL CONCURRENCY SAFEGUARD:
+  -- Exclude reservations for orders that are already paid/confirmed to prevent captured payments
+  -- from losing stock to a concurrent expiry execution.
   for v_res in 
-    select id, inventory_level_id, quantity 
-    from public.inventory_reservations 
-    where status = 'active' and expires_at < now()
-    for update
+    select r.id, r.inventory_level_id, r.quantity 
+    from public.inventory_reservations r
+    left join public.orders o on o.id = r.order_id
+    where r.status = 'active' 
+      and r.expires_at <= now()
+      and (o.status is null or o.status not in ('confirmed', 'processing', 'shipped', 'delivered'))
+    order by r.inventory_level_id, r.id
+    for update of r
   loop
-    update public.inventory_levels
-    set reserved = greatest(0, reserved - v_res.quantity),
-        updated_at = now()
-    where id = v_res.inventory_level_id;
+    select * into v_level
+    from public.inventory_levels
+    where id = v_res.inventory_level_id
+    for update;
+
+    if v_level.id is not null then
+      update public.inventory_levels
+      set reserved = greatest(0, reserved - v_res.quantity),
+          updated_at = now()
+      where id = v_level.id;
+    end if;
 
     update public.inventory_reservations
     set status = 'expired',

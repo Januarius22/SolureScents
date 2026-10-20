@@ -1,5 +1,5 @@
 import { requireApplicationAccess } from "@/features/auth/services/authorization";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createPrivilegedSupabaseClient } from "@/lib/supabase/server";
 import { resolveProductCollection } from "@/features/catalog/services/catalog-service";
 
 export interface AdminProductWithVariants {
@@ -40,7 +40,7 @@ export interface AdminCustomerSummary {
 
 export async function getCommerceOperations() {
   await requireApplicationAccess("admin");
-  const db = await createServerSupabaseClient();
+  const db = createPrivilegedSupabaseClient() ?? (await createServerSupabaseClient());
   const [orders, payments, levels, locations, variants, products, orderItems] = await Promise.all([
     db.from("orders").select("*").order("created_at", { ascending: false }),
     db.from("payments").select("*").order("created_at", { ascending: false }),

@@ -17,6 +17,9 @@ export const metadata = {
   title: "Payment Operations & Ledger | Solure Scents Admin",
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function Page({
   searchParams,
 }: PageProps<"/admin/payments">) {

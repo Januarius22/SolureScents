@@ -59,23 +59,25 @@ export async function reserveOrderInventory(
   items: { variantId: string; quantity: number }[],
   ttlMinutes = 15,
 ): Promise<ReservationResult> {
-  const dbClient = createPrivilegedSupabaseClient() ?? (await createServerSupabaseClient());
+  const dbClient = createPrivilegedSupabaseClient();
   const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString();
 
   try {
-    // Attempt database atomic RPC function if registered
-    const { data, error } = await dbClient.rpc("reserve_order_inventory", {
-      p_order_id: orderId,
-      p_ttl_minutes: ttlMinutes,
-    });
+    if (dbClient) {
+      // Attempt database atomic RPC function if registered
+      const { data, error } = await dbClient.rpc("reserve_order_inventory", {
+        p_order_id: orderId,
+        p_ttl_minutes: ttlMinutes,
+      });
 
-    if (!error && data) {
-      return {
-        success: true,
-        orderId,
-        reservedItems: items,
-        expiresAt,
-      };
+      if (!error && data) {
+        return {
+          success: true,
+          orderId,
+          reservedItems: items,
+          expiresAt,
+        };
+      }
     }
   } catch {
     // If RPC is pending migration, continue with graceful application-level tracking
@@ -112,7 +114,8 @@ export async function reserveOrderInventory(
  * Releases reserved inventory back to the available pool when an order is cancelled or payment fails.
  */
 export async function releaseOrderInventory(orderId: string): Promise<boolean> {
-  const dbClient = createPrivilegedSupabaseClient() ?? (await createServerSupabaseClient());
+  const dbClient = createPrivilegedSupabaseClient();
+  if (!dbClient) return true;
 
   try {
     const { error } = await dbClient.rpc("release_order_inventory", {
@@ -131,7 +134,8 @@ export async function releaseOrderInventory(orderId: string): Promise<boolean> {
  * Releases all expired inventory reservations whose TTL has elapsed without payment.
  */
 export async function releaseExpiredReservations(): Promise<number> {
-  const dbClient = createPrivilegedSupabaseClient() ?? (await createServerSupabaseClient());
+  const dbClient = createPrivilegedSupabaseClient();
+  if (!dbClient) return 0;
 
   try {
     const { data, error } = await dbClient.rpc("release_expired_inventory_reservations");

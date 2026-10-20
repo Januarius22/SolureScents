@@ -19,8 +19,8 @@ export default async function PaymentCallbackPage({
   const paymentRef = reference || trxref || null;
 
   return (
-    <div className="min-h-screen bg-ivory/40 pb-24 pt-16 sm:pt-24">
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-ivory/40 pb-14 pt-6 sm:pb-24 sm:pt-20">
+      <div className="mx-auto max-w-3xl px-3 sm:px-6 lg:px-8">
         <PaymentCallbackVerifier
           reference={paymentRef}
           orderId={order_id || null}
